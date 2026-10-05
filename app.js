@@ -18,10 +18,19 @@ const store={
   get(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}},
   set(key,value){localStorage.setItem(key,JSON.stringify(value))}
 };
+const savedVideosInitial=store.get("ylp_saved_videos",[]);
+const legacyRecent=store.get("ylp_recent",[]);
 const state={
   presets:store.get("ylp_presets",[]),
-  recent:store.get("ylp_recent",[])
+  recent:legacyRecent,
+  videos:savedVideosInitial.length?savedVideosInitial:legacyRecent.map(r=>({
+    videoId:r.videoId,
+    url:"https://www.youtube.com/watch?v="+r.videoId,
+    title:"YouTube video · "+r.videoId,
+    updatedAt:r.updatedAt||Date.now()
+  }))
 };
+if(!savedVideosInitial.length&&state.videos.length)store.set("ylp_saved_videos",state.videos);
 
 function parseVideoId(input){
   const raw=String(input||"").trim();
@@ -48,8 +57,11 @@ function parseTime(value){
 }
 function formatTime(sec){
   sec=Math.max(0,Number(sec)||0);
-  const whole=Math.floor(sec),s=whole%60,m=Math.floor(whole/60)%60,h=Math.floor(whole/3600);
-  return h?String(h)+":"+String(m).padStart(2,"0")+":"+String(s).padStart(2,"0"):String(m)+":"+String(s).padStart(2,"0");
+  const rounded=Math.round(sec*10)/10;
+  const whole=Math.floor(rounded),fraction=Math.round((rounded-whole)*10);
+  const s=whole%60,m=Math.floor(whole/60)%60,h=Math.floor(whole/3600);
+  const secText=String(s).padStart(2,"0")+(fraction?"."+fraction:"");
+  return h?String(h)+":"+String(m).padStart(2,"0")+":"+secText:String(m)+":"+secText;
 }
 function formatBytes(bytes){
   const n=Number(bytes)||0;
@@ -96,7 +108,12 @@ window.onYouTubeIframeAPIReady=()=>{
     playerVars:{playsinline:1,rel:0,modestbranding:1},
     events:{
       onReady:()=>{playerReady=true},
-      onStateChange:e=>{if(currentMediaType==="youtube"&&e.data===YT.PlayerState.ENDED&&loopActive)handleLoopBoundary()},
+      onStateChange:e=>{
+        if(currentMediaType==="youtube"){
+          syncCurrentVideoTitle();
+          if(e.data===YT.PlayerState.ENDED&&loopActive)handleLoopBoundary();
+        }
+      },
       onError:()=>showError("Bu video gömülü oynatmaya izin vermiyor veya açılamıyor.")
     }
   });
@@ -104,7 +121,51 @@ window.onYouTubeIframeAPIReady=()=>{
 
 function addRecent(videoId){
   state.recent=[{videoId,updatedAt:Date.now()},...state.recent.filter(x=>x.videoId!==videoId)].slice(0,10);
-  store.set("ylp_recent",state.recent);renderRecent();
+  store.set("ylp_recent",state.recent);
+}
+function saveYoutubeVideo(videoId){
+  const existing=state.videos.find(v=>v.videoId===videoId);
+  const item=existing||{
+    videoId,
+    url:"https://www.youtube.com/watch?v="+videoId,
+    title:"YouTube video · "+videoId,
+    createdAt:Date.now()
+  };
+  item.updatedAt=Date.now();
+  state.videos=[item,...state.videos.filter(v=>v.videoId!==videoId)];
+  store.set("ylp_saved_videos",state.videos);
+  renderSavedVideos();
+}
+function syncCurrentVideoTitle(){
+  if(currentMediaType!=="youtube"||!currentVideoId||!playerReady||!player)return;
+  try{
+    const data=player.getVideoData?.();
+    const title=String(data?.title||"").trim();
+    if(!title)return;
+    const item=state.videos.find(v=>v.videoId===currentVideoId);
+    if(item&&item.title!==title){
+      item.title=title;
+      store.set("ylp_saved_videos",state.videos);
+      renderSavedVideos();
+    }
+  }catch{}
+}
+function deleteSavedVideo(videoId){
+  state.videos=state.videos.filter(v=>v.videoId!==videoId);
+  store.set("ylp_saved_videos",state.videos);
+  renderSavedVideos();
+}
+function renderSavedVideos(){
+  const list=$("#savedVideoList");
+  if(!list)return;
+  $("#savedVideoEmpty").classList.toggle("hidden",state.videos.length>0);
+  list.innerHTML=state.videos.map(v=>{
+    const selected=currentMediaType==="youtube"&&currentVideoId===v.videoId;
+    const count=state.presets.filter(p=>(p.sourceType||"youtube")==="youtube"&&(p.sourceId||p.videoId)===v.videoId).length;
+    return '<article class="saved-video-card'+(selected?' selected':'')+'"><div class="saved-video-main"><div><div class="saved-video-title">'+escapeHtml(v.title||("YouTube video · "+v.videoId))+'</div><div class="saved-video-meta">'+count+' kayıtlı bölüm · '+escapeHtml(v.videoId)+'</div></div>'+(selected?'<span class="selected-badge">Seçili</span>':'')+'</div><div class="saved-video-actions"><button data-video-open="'+v.videoId+'">Aç</button><button data-video-delete="'+v.videoId+'">Listeden sil</button></div></article>';
+  }).join("");
+  list.querySelectorAll("[data-video-open]").forEach(b=>b.onclick=()=>loadVideo(b.dataset.videoOpen,false));
+  list.querySelectorAll("[data-video-delete]").forEach(b=>b.onclick=()=>deleteSavedVideo(b.dataset.videoDelete));
 }
 function loadVideo(input,autoplay=false){
   const id=parseVideoId(input);
@@ -117,6 +178,10 @@ function loadVideo(input,autoplay=false){
   $("#player").classList.remove("hidden");$("#emptyPlayer").classList.add("hidden");showError("");
   if(autoplay)player.loadVideoById(id);else player.cueVideoById(id);
   addRecent(id);
+  saveYoutubeVideo(id);
+  renderPresets();
+  setTimeout(syncCurrentVideoTitle,600);
+  setTimeout(syncCurrentVideoTitle,1500);
 }
 function setPoint(which){
   if(!mediaLoaded())return;
@@ -125,7 +190,8 @@ function setPoint(which){
 }
 function nudge(which,delta){
   const el=$(which==="a"?"#startTime":"#endTime"),n=parseTime(el.value);
-  el.value=formatTime(Math.max(0,(Number.isFinite(n)?n:0)+delta));updateRangeStatus();
+  const next=Math.round(Math.max(0,(Number.isFinite(n)?n:0)+delta)*10)/10;
+  el.value=formatTime(next);updateRangeStatus();
 }
 function validateLoop(){
   if(!mediaLoaded())return"Önce bir video veya ses aç.";
@@ -193,7 +259,7 @@ function savePreset(){
     pause:Number($("#pauseBetween").value)||0,
     createdAt:Date.now()
   });
-  store.set("ylp_presets",state.presets);renderPresets();
+  store.set("ylp_presets",state.presets);renderPresets();renderSavedVideos();
 }
 async function usePreset(p){
   $("#startTime").value=formatTime(p.a);$("#endTime").value=formatTime(p.b);
@@ -203,12 +269,23 @@ async function usePreset(p){
   if(type==="local")await loadOfflineMedia(p.sourceId);
   else loadVideo(p.sourceId||p.videoId,false);
 }
-function deletePreset(id){state.presets=state.presets.filter(p=>p.id!==id);store.set("ylp_presets",state.presets);renderPresets()}
+function deletePreset(id){state.presets=state.presets.filter(p=>p.id!==id);store.set("ylp_presets",state.presets);renderPresets();renderSavedVideos()}
 function renderPresets(){
-  const list=$("#presetList");$("#presetEmpty").classList.toggle("hidden",state.presets.length>0);
-  list.innerHTML=state.presets.map(p=>{
+  const list=$("#presetList");
+  let visible=[];
+  if(currentMediaType==="youtube"&&currentVideoId){
+    visible=state.presets.filter(p=>{
+      const type=p.sourceType||(p.videoId?"youtube":"");
+      return type==="youtube"&&(p.sourceId||p.videoId)===currentVideoId;
+    });
+  }else if(currentMediaType==="local"&&currentOfflineId){
+    visible=state.presets.filter(p=>p.sourceType==="local"&&p.sourceId===currentOfflineId);
+  }
+  $("#presetEmpty").classList.toggle("hidden",visible.length>0);
+  $("#presetEmpty").textContent=mediaLoaded()?"Bu video için henüz kayıtlı bölüm yok.":"Önce kayıtlı bir video seç veya yeni bir YouTube bağlantısı aç.";
+  list.innerHTML=visible.map(p=>{
     const type=p.sourceType||(p.videoId?"youtube":"");
-    return '<article class="preset-card"><div class="preset-main"><div><div class="preset-title">'+escapeHtml(p.title)+'</div><div class="preset-meta">'+(type==="local"?"Çevrimdışı · ":"YouTube · ")+formatTime(p.a)+' – '+formatTime(p.b)+' · '+p.repeats+' tekrar · '+p.rate+'×</div></div></div><div class="preset-actions"><button data-use="'+p.id+'">Aç</button><button data-delete="'+p.id+'">Sil</button></div></article>'
+    return '<article class="preset-card"><div class="preset-main"><div><div class="preset-title">'+escapeHtml(p.title)+'</div><div class="preset-meta">'+formatTime(p.a)+' – '+formatTime(p.b)+' · '+p.repeats+' tekrar · '+p.rate+'×</div></div></div><div class="preset-actions"><button data-use="'+p.id+'">Aç</button><button data-delete="'+p.id+'">Sil</button></div></article>'
   }).join("");
   list.querySelectorAll("[data-use]").forEach(b=>b.onclick=()=>usePreset(state.presets.find(p=>p.id===b.dataset.use)));
   list.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>deletePreset(b.dataset.delete));
@@ -379,7 +456,7 @@ async function loadOfflineMedia(id){
   $("#player").classList.add("hidden");$("#emptyPlayer").classList.add("hidden");
   currentObjectUrl=URL.createObjectURL(item.blob);
   localPlayer.src=currentObjectUrl;localPlayer.classList.remove("hidden");localPlayer.load();
-  $("#loopState").textContent="Çevrimdışı medya hazır";showError("");
+  $("#loopState").textContent="Çevrimdışı medya hazır";showError("");renderPresets();renderSavedVideos();
 }
 async function deleteOfflineMedia(id){
   if(currentMediaType==="local"&&currentOfflineId===id){
@@ -421,5 +498,5 @@ localPlayer.addEventListener("ended",()=>{if(currentMediaType==="local"&&loopAct
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstallPrompt=e;$("#installBtn").classList.remove("hidden")});
 $("#installBtn").onclick=async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$("#installBtn").classList.add("hidden")};
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=5");
-renderPresets();renderRecent();renderOfflineMedia();updateRangeStatus();checkServerStatus();
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=6");
+renderSavedVideos();renderPresets();renderOfflineMedia();updateRangeStatus();checkServerStatus();
