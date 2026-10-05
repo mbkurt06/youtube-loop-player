@@ -10,7 +10,7 @@
 <title>YouTube Loop Player</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=11">
+<link rel="stylesheet" href="./styles.css?v=12">
 </head>
 <body>
 <main class="app">
@@ -70,6 +70,18 @@
       <label><span>Tekrar arası bekleme</span><select id="pauseBetween"><option value="0" selected>Yok</option><option value="0.5">0.5 sn</option><option value="1">1 sn</option><option value="2">2 sn</option><option value="3">3 sn</option></select></label>
     </div>
 
+    <div class="speed-panel edit-speed-panel">
+      <span class="speed-title">Oynatma hızı</span>
+      <div class="speed-buttons">
+        <button type="button" data-speed="0.5">0,5×</button>
+        <button type="button" data-speed="0.75">0,75×</button>
+        <button type="button" data-speed="1" class="active">1×</button>
+        <button type="button" data-speed="1.25">1,25×</button>
+        <button type="button" data-speed="1.5">1,5×</button>
+        <button type="button" data-speed="2">2×</button>
+      </div>
+      <label class="manual-speed"><span>Manuel</span><input id="editSpeedManual" type="number" min="0.25" max="2" step="0.05" value="1"></label>
+    </div>
     <div class="loop-actions"><button id="startLoopBtn" class="primary big">▶ Tekrarı başlat</button><button id="stopLoopBtn" class="secondary big" disabled>■ Durdur</button></div>
     <div class="status-panel"><div><span class="status-label">Tekrar</span><strong id="repeatStatus">0 / 10</strong></div><div><span class="status-label">Aralık</span><strong id="rangeStatus">0:00 – 0:10</strong></div><div><span class="status-label">Durum</span><strong id="loopState">Hazır</strong></div></div>
   </section>
@@ -110,6 +122,18 @@
 
   <section class="card simple-player-controls">
     <div id="playSelectedInfo" class="play-selected-info">Bir video ve tekrar bölümü seç.</div>
+    <div class="speed-panel play-speed-panel">
+      <span class="speed-title">Oynatma hızı</span>
+      <div class="speed-buttons">
+        <button type="button" data-play-speed="0.5">0,5×</button>
+        <button type="button" data-play-speed="0.75">0,75×</button>
+        <button type="button" data-play-speed="1" class="active">1×</button>
+        <button type="button" data-play-speed="1.25">1,25×</button>
+        <button type="button" data-play-speed="1.5">1,5×</button>
+        <button type="button" data-play-speed="2">2×</button>
+      </div>
+      <label class="manual-speed"><span>Manuel hız</span><input id="playSpeedManual" type="number" min="0.25" max="2" step="0.05" value="1"></label>
+    </div>
     <div class="loop-actions"><button id="playPresetBtn" class="primary big" disabled>▶ Tekrarı oynat</button><button id="playStopBtn" class="secondary big" disabled>■ Durdur</button></div>
     <div class="simple-status"><strong id="playRepeatStatus">0 / 0</strong><span id="playLoopState">Hazır</span></div>
   </section>
@@ -125,6 +149,6 @@
 <dialog id="saveDialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><strong>Bölümü kaydet</strong><button value="cancel" class="icon-btn">×</button></div><label><span>Başlık</span><input id="presetTitle" type="text" placeholder="Örn. 1. bölüm"></label><div class="dialog-summary" id="presetSummary"></div><button id="confirmSavePreset" value="default" class="primary">Kaydet</button></form></dialog>
 
 <script src="https://www.youtube.com/iframe_api"></script>
-<script src="./app.js?v=11" defer></script>
+<script src="./app.js?v=12" defer></script>
 </body>
 </html>
