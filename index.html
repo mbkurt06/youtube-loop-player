@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-title" content="Loop Player">
 <title>YouTube Loop Player</title>
 <link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=4">
+<link rel="stylesheet" href="./styles.css?v=5">
 </head>
 <body>
 <main class="app">
@@ -15,9 +15,18 @@
 <section class="card"><label for="videoUrl">YouTube bağlantısı</label><div class="url-row"><input id="videoUrl" type="url" inputmode="url" autocomplete="off" placeholder="https://www.youtube.com/watch?v=..."><button id="loadBtn" class="primary">Videoyu aç</button></div>
 <div class="youtube-download-row">
   <label class="download-consent"><input id="downloadConsent" type="checkbox"> Bu videoyu çevrimdışı kaydetme hakkım var.</label>
+  <label class="session-select"><span>YouTube oturumu</span>
+    <select id="cookieBrowser">
+      <option value="none">Kullanmadan dene</option>
+      <option value="safari">Safari</option>
+      <option value="chrome">Chrome</option>
+      <option value="firefox">Firefox</option>
+    </select>
+  </label>
   <button id="youtubeDownloadBtn" class="secondary">YouTube’dan indir</button>
 </div>
 <p id="youtubeDownloadStatus" class="muted tiny"></p>
+<p id="serverStatus" class="muted tiny"></p>
 <p id="loadError" class="error hidden"></p></section>
 <section class="player-shell"><div id="player"></div><video id="localPlayer" class="hidden" controls playsinline></video><div id="emptyPlayer" class="empty-player"><strong>Bir YouTube videosu aç veya yerel medya seç</strong><span>Çevrimdışı kullanım için kendi video/ses dosyanı içe aktarabilirsin.</span></div></section>
 <section class="card offline-card">
@@ -55,5 +64,5 @@
 <section class="card"><div class="section-head"><div><h2>Son videolar</h2><p>Son açtığın videolara hızlı dön.</p></div></div><div id="recentList" class="recent-list"></div><p id="recentEmpty" class="muted">Henüz video açılmadı.</p></section>
 </main>
 <dialog id="saveDialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><strong>Bölümü kaydet</strong><button value="cancel" class="icon-btn">×</button></div><label><span>Başlık</span><input id="presetTitle" type="text" placeholder="Örn. Salât-ı Münciye 1. bölüm"></label><div class="dialog-summary" id="presetSummary"></div><button id="confirmSavePreset" value="default" class="primary">Kaydet</button></form></dialog>
-<script src="https://www.youtube.com/iframe_api"></script><script src="./app.js?v=4" defer></script>
+<script src="https://www.youtube.com/iframe_api"></script><script src="./app.js?v=5" defer></script>
 </body></html>
