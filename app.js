@@ -14,6 +14,7 @@ let loopPaused=false;
 let waiting=false;
 let deferredInstallPrompt=null;
 let activeScreen="edit";
+let editingPresetId="";
 
 const localPlayer=$("#localPlayer");
 
@@ -586,6 +587,70 @@ async function usePreset(p,{play=false}={}){
   }
 }
 
+
+function openEditPreset(id){
+  const p=state.presets.find(x=>x.id===id);
+  if(!p)return;
+  editingPresetId=id;
+  $("#editPresetNumber").value=String(presetNumber(p));
+  $("#editPresetStart").value=formatTime(p.a);
+  $("#editPresetEnd").value=formatTime(p.b);
+  $("#editPresetError").textContent="";
+  $("#editPresetError").classList.add("hidden");
+  $("#editPresetDialog").showModal();
+}
+
+function saveEditedPreset(){
+  const p=state.presets.find(x=>x.id===editingPresetId);
+  if(!p)return;
+
+  const sectionNumber=Number($("#editPresetNumber").value);
+  const a=parseTime($("#editPresetStart").value);
+  const b=parseTime($("#editPresetEnd").value);
+  const errorEl=$("#editPresetError");
+
+  let error="";
+  if(!Number.isInteger(sectionNumber)||sectionNumber<1)error="Bölüm numarası 1 veya daha büyük bir tam sayı olmalı.";
+  else if(!Number.isFinite(a)||!Number.isFinite(b))error="Başlangıç ve bitiş zamanlarını kontrol et.";
+  else if(b<=a)error="Bitiş zamanı başlangıçtan büyük olmalı.";
+
+  const type=p.sourceType||(p.videoId?"youtube":"");
+  const sourceId=p.sourceId||p.videoId;
+  const sameMedia=state.presets.filter(x=>{
+    if(x.id===p.id)return false;
+    const xt=x.sourceType||(x.videoId?"youtube":"");
+    const xs=x.sourceId||x.videoId;
+    return xt===type&&xs===sourceId;
+  });
+  if(!error&&sameMedia.some(x=>presetNumber(x)===sectionNumber))error="Bu video için "+sectionNumber+" numaralı bölüm zaten var.";
+
+  if(error){
+    errorEl.textContent=error;
+    errorEl.classList.remove("hidden");
+    return;
+  }
+
+  p.title=String(sectionNumber);
+  p.a=a;
+  p.b=b;
+  p.updatedAt=Date.now();
+  store.set("ylp_presets",state.presets);
+
+  if($("#playPresetSelect").value===p.id||(
+      (currentMediaType==="youtube"&&type==="youtube"&&currentVideoId===sourceId)||
+      (currentMediaType==="local"&&type==="local"&&currentOfflineId===sourceId)
+    )){
+    $("#startTime").value=formatTime(a);
+    $("#endTime").value=formatTime(b);
+    updateRangeStatus();
+  }
+
+  editingPresetId="";
+  renderPresets();
+  renderSavedVideos();
+  renderPlaySelectors();
+}
+
 function deletePreset(id){
   state.presets=state.presets.filter(p=>p.id!==id);
   store.set("ylp_presets",state.presets);
@@ -607,9 +672,10 @@ function renderPresets(){
 
   $("#presetEmpty").classList.toggle("hidden",visible.length>0);
   $("#presetEmpty").textContent=mediaLoaded()?"Bu video için henüz kayıtlı bölüm yok.":"Önce bir video aç.";
-  list.innerHTML=visible.map(p=>'<article class="preset-card"><div class="preset-main"><div><div class="preset-title">Bölüm '+escapeHtml(p.title)+'</div><div class="preset-meta">'+formatTime(p.a)+' – '+formatTime(p.b)+' · '+p.repeats+' tekrar · '+p.rate+'×</div></div></div><div class="preset-actions"><button data-use="'+p.id+'">Aç</button><button data-play="'+p.id+'">Oynat</button><button data-delete="'+p.id+'">Sil</button></div></article>').join("");
+  list.innerHTML=visible.map(p=>'<article class="preset-card"><div class="preset-main"><div><div class="preset-title">Bölüm '+escapeHtml(p.title)+'</div><div class="preset-meta">'+formatTime(p.a)+' – '+formatTime(p.b)+' · '+p.repeats+' tekrar · '+p.rate+'×</div></div></div><div class="preset-actions"><button data-use="'+p.id+'">Aç</button><button data-play="'+p.id+'">Oynat</button><button data-edit="'+p.id+'">Düzenle</button><button data-delete="'+p.id+'">Sil</button></div></article>').join("");
   list.querySelectorAll("[data-use]").forEach(b=>b.onclick=()=>usePreset(state.presets.find(p=>p.id===b.dataset.use)));
   list.querySelectorAll("[data-play]").forEach(b=>b.onclick=()=>usePreset(state.presets.find(p=>p.id===b.dataset.play),{play:true}));
+  list.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openEditPreset(b.dataset.edit));
   list.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>deletePreset(b.dataset.delete));
 }
 
@@ -839,6 +905,7 @@ $("#startLoopBtn").onclick=startLoop;
 $("#stopLoopBtn").onclick=e=>{e.preventDefault();e.stopPropagation();pauseResumeLoop()};
 $("#savePresetBtn").onclick=openSaveDialog;
 $("#confirmSavePreset").addEventListener("click",savePreset);
+$("#confirmEditPreset").addEventListener("click",saveEditedPreset);
 ["#startTime","#endTime"].forEach(s=>$(s).addEventListener("input",()=>{loopPaused=false;loopIteration=0;updateRangeStatus()}));
 $("#repeatCount").addEventListener("input",()=>{loopPaused=false;loopIteration=0;updateRangeStatus()});
 $("#playbackRate").addEventListener("change",()=>setPlaybackSpeed($("#playbackRate").value));
@@ -890,4 +957,4 @@ renderPlaySelectors();
 renderOfflineMedia();
 updateRangeStatus();
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=17");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=18");
