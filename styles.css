@@ -159,3 +159,41 @@ dialog{border:0;border-radius:20px;padding:0;width:min(92vw,460px);box-shadow:0 
   .inline-actions .secondary{width:100%}
   .simple-status{font-size:14px}
 }
+
+
+/* v12: shared playback speed controls */
+.speed-panel{
+  margin-top:16px;
+  padding:12px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:#f9fafb;
+  display:grid;
+  gap:10px;
+}
+:root.dark .speed-panel{background:#0f172a}
+.speed-title{font-size:13px;font-weight:800;color:var(--muted)}
+.speed-buttons{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.speed-buttons button{
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--text);
+  border-radius:10px;
+  padding:9px 6px;
+  font-weight:800;
+  font-size:13px;
+}
+.speed-buttons button.active{
+  background:var(--primary);
+  color:#fff;
+  border-color:var(--primary);
+}
+:root.dark .speed-buttons button.active{color:#111827}
+.manual-speed{display:grid;grid-template-columns:auto minmax(90px,140px);align-items:center;gap:10px}
+.manual-speed span{font-size:13px;color:var(--muted)}
+.manual-speed input{padding:9px 10px}
+
+@media(max-width:680px){
+  .speed-buttons{grid-template-columns:repeat(3,1fr)}
+  .manual-speed{grid-template-columns:1fr}
+}
