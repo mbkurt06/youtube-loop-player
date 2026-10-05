@@ -22,3 +22,6 @@ dialog{border:0;border-radius:20px;padding:0;width:min(92vw,460px);box-shadow:0 
 .offline-actions button{background:#fff;border:1px solid var(--border);border-radius:12px;padding:9px 12px;font-weight:700}
 .file-button{display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
 .tiny{font-size:12px;line-height:1.45}
+
+.download-box{margin-top:14px;padding:12px;border:1px dashed var(--border);border-radius:14px;background:#f9fafb}
+.download-box label{margin-bottom:8px}
