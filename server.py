@@ -96,35 +96,89 @@ class Handler(SimpleHTTPRequestHandler):
 
             with tempfile.TemporaryDirectory(prefix="yt-loop-") as tmp:
                 has_ffmpeg = bool(shutil.which("ffmpeg"))
-                if has_ffmpeg:
-                    # Prefer a Safari/iPhone-friendly H.264 + M4A pair, then progressively
-                    # relax the selector. The old selector required one combined MP4 stream,
-                    # which many current YouTube videos no longer expose.
-                    format_selector = (
-                        "bv*[vcodec^=avc1]+ba[ext=m4a]/"
-                        "b[ext=mp4][vcodec^=avc1]/"
-                        "bv*+ba/"
-                        "b"
-                    )
-                else:
-                    # Without ffmpeg we cannot merge separate video/audio streams.
-                    format_selector = "b[ext=mp4]/b"
 
-                opts = {
-                    "format": format_selector,
-                    "outtmpl": os.path.join(tmp, "%(id)s.%(ext)s"),
+                base_opts = {
                     "noplaylist": True,
                     "quiet": True,
                     "no_warnings": False,
                     "restrictfilenames": True,
                     "js_runtimes": runtimes,
                 }
-                if has_ffmpeg:
-                    opts["merge_output_format"] = "mp4"
                 if cookie_browser != "none":
-                    opts["cookiesfrombrowser"] = (cookie_browser,)
+                    base_opts["cookiesfrombrowser"] = (cookie_browser,)
 
                 try:
+                    # First inspect the formats YouTube actually exposes for this video.
+                    with yt_dlp.YoutubeDL(base_opts) as probe:
+                        probe_info = probe.extract_info(url, download=False)
+
+                    formats = probe_info.get("formats") or []
+
+                    # Prefer an iPhone/Safari-friendly H.264 MP4 video up to 720p.
+                    video_formats = [
+                        f for f in formats
+                        if f.get("vcodec") not in (None, "none")
+                        and f.get("acodec") in (None, "none")
+                        and f.get("ext") == "mp4"
+                        and str(f.get("vcodec") or "").lower().startswith("avc1")
+                    ]
+                    if not video_formats:
+                        video_formats = [
+                            f for f in formats
+                            if f.get("vcodec") not in (None, "none")
+                            and f.get("acodec") in (None, "none")
+                        ]
+
+                    audio_formats = [
+                        f for f in formats
+                        if f.get("vcodec") in (None, "none")
+                        and f.get("acodec") not in (None, "none")
+                        and f.get("ext") == "m4a"
+                    ]
+                    if not audio_formats:
+                        audio_formats = [
+                            f for f in formats
+                            if f.get("vcodec") in (None, "none")
+                            and f.get("acodec") not in (None, "none")
+                        ]
+
+                    combined_formats = [
+                        f for f in formats
+                        if f.get("vcodec") not in (None, "none")
+                        and f.get("acodec") not in (None, "none")
+                    ]
+
+                    selected_format = None
+
+                    if has_ffmpeg and video_formats and audio_formats:
+                        under_720 = [f for f in video_formats if (f.get("height") or 0) <= 720]
+                        pool = under_720 or video_formats
+                        video = max(pool, key=lambda f: ((f.get("height") or 0), (f.get("tbr") or 0)))
+                        audio = max(audio_formats, key=lambda f: (f.get("abr") or f.get("tbr") or 0))
+                        selected_format = f"{video.get('format_id')}+{audio.get('format_id')}"
+                    elif combined_formats:
+                        combined_mp4 = [f for f in combined_formats if f.get("ext") == "mp4"]
+                        pool = combined_mp4 or combined_formats
+                        selected_format = max(pool, key=lambda f: ((f.get("height") or 0), (f.get("tbr") or 0))).get("format_id")
+                    elif video_formats and audio_formats and not has_ffmpeg:
+                        raise RuntimeError(
+                            "Bu videoda ses ve görüntü ayrı akışlarda geliyor. Birleştirmek için ffmpeg gerekli. Terminalde: brew install ffmpeg"
+                        )
+
+                    if not selected_format:
+                        available_ids = ", ".join(str(f.get("format_id")) for f in formats if f.get("format_id"))
+                        raise RuntimeError("Uygun video/ses formatı bulunamadı. Görülen formatlar: " + available_ids)
+
+                    print("Selected YouTube format:", selected_format)
+
+                    opts = dict(base_opts)
+                    opts.update({
+                        "format": selected_format,
+                        "outtmpl": os.path.join(tmp, "%(id)s.%(ext)s"),
+                    })
+                    if has_ffmpeg and "+" in selected_format:
+                        opts["merge_output_format"] = "mp4"
+
                     with yt_dlp.YoutubeDL(opts) as ydl:
                         info = ydl.extract_info(url, download=True)
                 except yt_dlp.utils.DownloadError as exc:
