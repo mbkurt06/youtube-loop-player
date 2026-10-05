@@ -1,11 +1,27 @@
 const $=s=>document.querySelector(s);
-let player=null,playerReady=false,currentVideoId="",loopTimer=null,loopActive=false,loopIteration=0,waiting=false,deferredInstallPrompt=null;
+
+let player=null;
+let playerReady=false;
+let currentVideoId="";
+let currentOfflineId="";
+let currentMediaType="";
+let currentObjectUrl="";
+let loopTimer=null;
+let loopActive=false;
+let loopIteration=0;
+let waiting=false;
+let deferredInstallPrompt=null;
+
+const localPlayer=$("#localPlayer");
 
 const store={
   get(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}},
   set(key,value){localStorage.setItem(key,JSON.stringify(value))}
 };
-const state={presets:store.get("ylp_presets",[]),recent:store.get("ylp_recent",[])};
+const state={
+  presets:store.get("ylp_presets",[]),
+  recent:store.get("ylp_recent",[])
+};
 
 function parseVideoId(input){
   const raw=String(input||"").trim();
@@ -35,6 +51,12 @@ function formatTime(sec){
   const whole=Math.floor(sec),s=whole%60,m=Math.floor(whole/60)%60,h=Math.floor(whole/3600);
   return h?String(h)+":"+String(m).padStart(2,"0")+":"+String(s).padStart(2,"0"):String(m)+":"+String(s).padStart(2,"0");
 }
+function formatBytes(bytes){
+  const n=Number(bytes)||0;
+  if(n<1024)return n+" B";
+  if(n<1024*1024)return(n/1024).toFixed(1)+" KB";
+  return(n/(1024*1024)).toFixed(1)+" MB";
+}
 function currentRange(){return{a:parseTime($("#startTime").value),b:parseTime($("#endTime").value)}}
 function updateRangeStatus(){
   const r=currentRange(),total=Math.max(1,Number($("#repeatCount").value)||1);
@@ -44,35 +66,61 @@ function updateRangeStatus(){
 function showError(msg){$("#loadError").textContent=msg||"";$("#loadError").classList.toggle("hidden",!msg)}
 function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
+function mediaLoaded(){return currentMediaType==="youtube"?!!currentVideoId:currentMediaType==="local"?!!currentOfflineId:false}
+function mediaTime(){return currentMediaType==="local"?(localPlayer.currentTime||0):(playerReady&&player?(player.getCurrentTime()||0):0)}
+function mediaSeek(t){
+  t=Math.max(0,Number(t)||0);
+  if(currentMediaType==="local")localPlayer.currentTime=t;
+  else if(playerReady&&player)player.seekTo(t,true);
+}
+function mediaPlay(){
+  if(currentMediaType==="local"){localPlayer.play().catch(()=>{})}
+  else if(playerReady&&player)player.playVideo();
+}
+function mediaPause(){
+  if(currentMediaType==="local")localPlayer.pause();
+  else if(playerReady&&player)player.pauseVideo();
+}
+function mediaSetRate(rate){
+  rate=Number(rate)||1;
+  if(currentMediaType==="local")localPlayer.playbackRate=rate;
+  else if(playerReady&&player){try{player.setPlaybackRate(rate)}catch{}}
+}
+function releaseObjectUrl(){
+  if(currentObjectUrl){URL.revokeObjectURL(currentObjectUrl);currentObjectUrl=""}
+}
+
 window.onYouTubeIframeAPIReady=()=>{
   player=new YT.Player("player",{
     width:"100%",height:"100%",videoId:"",
     playerVars:{playsinline:1,rel:0,modestbranding:1},
     events:{
       onReady:()=>{playerReady=true},
-      onStateChange:e=>{if(e.data===YT.PlayerState.ENDED&&loopActive)handleLoopBoundary()},
+      onStateChange:e=>{if(currentMediaType==="youtube"&&e.data===YT.PlayerState.ENDED&&loopActive)handleLoopBoundary()},
       onError:()=>showError("Bu video gömülü oynatmaya izin vermiyor veya açılamıyor.")
     }
   });
 };
 
 function addRecent(videoId){
-  state.recent=[{videoId:videoId,updatedAt:Date.now()}].concat(state.recent.filter(x=>x.videoId!==videoId)).slice(0,10);
+  state.recent=[{videoId,updatedAt:Date.now()},...state.recent.filter(x=>x.videoId!==videoId)].slice(0,10);
   store.set("ylp_recent",state.recent);renderRecent();
 }
-function loadVideo(input,autoplay){
+function loadVideo(input,autoplay=false){
   const id=parseVideoId(input);
   if(!id){showError("Geçerli bir YouTube bağlantısı veya video kimliği gir.");return}
   if(!playerReady||!player){showError("YouTube oynatıcı henüz hazır değil. Birkaç saniye sonra tekrar dene.");return}
-  stopLoop(false);currentVideoId=id;
+  stopLoop(false);releaseObjectUrl();
+  currentMediaType="youtube";currentVideoId=id;currentOfflineId="";
   $("#videoUrl").value="https://www.youtube.com/watch?v="+id;
-  $("#emptyPlayer").classList.add("hidden");showError("");
+  localPlayer.pause();localPlayer.removeAttribute("src");localPlayer.load();localPlayer.classList.add("hidden");
+  $("#player").classList.remove("hidden");$("#emptyPlayer").classList.add("hidden");showError("");
   if(autoplay)player.loadVideoById(id);else player.cueVideoById(id);
   addRecent(id);
 }
 function setPoint(which){
-  if(!playerReady||!currentVideoId)return;
-  const t=Math.max(0,player.getCurrentTime()||0);
+  if(!mediaLoaded())return;
+  const t=Math.max(0,mediaTime());
   $(which==="a"?"#startTime":"#endTime").value=formatTime(t);updateRangeStatus();
 }
 function nudge(which,delta){
@@ -80,7 +128,7 @@ function nudge(which,delta){
   el.value=formatTime(Math.max(0,(Number.isFinite(n)?n:0)+delta));updateRangeStatus();
 }
 function validateLoop(){
-  if(!playerReady||!currentVideoId)return"Önce bir video aç.";
+  if(!mediaLoaded())return"Önce bir video veya ses aç.";
   const r=currentRange();
   if(!Number.isFinite(r.a)||!Number.isFinite(r.b))return"A ve B zamanlarını kontrol et.";
   if(r.b<=r.a)return"Bitiş zamanı başlangıçtan büyük olmalı.";
@@ -91,27 +139,30 @@ function startLoop(){
   showError("");const r=currentRange();
   loopIteration=0;loopActive=true;waiting=false;
   $("#startLoopBtn").disabled=true;$("#stopLoopBtn").disabled=false;$("#loopState").textContent="Tekrar ediyor";
-  player.setPlaybackRate(Number($("#playbackRate").value)||1);player.seekTo(r.a,true);player.playVideo();
-  clearInterval(loopTimer);loopTimer=setInterval(loopTick,100);updateRangeStatus();
+  mediaSetRate($("#playbackRate").value);mediaSeek(r.a);mediaPlay();
+  clearInterval(loopTimer);loopTimer=setInterval(loopTick,80);updateRangeStatus();
 }
 function loopTick(){
-  if(!loopActive||waiting||!playerReady)return;
-  const r=currentRange(),t=player.getCurrentTime()||0;
-  if(t>=r.b-0.05)handleLoopBoundary();
+  if(!loopActive||waiting||!mediaLoaded())return;
+  const r=currentRange(),t=mediaTime();
+  if(t>=r.b-0.04)handleLoopBoundary();
 }
 function handleLoopBoundary(){
   if(!loopActive||waiting)return;
   const target=Math.max(1,Number($("#repeatCount").value)||1);
   loopIteration++;updateRangeStatus();
   if(loopIteration>=target){
-    loopActive=false;clearInterval(loopTimer);loopTimer=null;player.pauseVideo();
+    loopActive=false;clearInterval(loopTimer);loopTimer=null;mediaPause();
     $("#startLoopBtn").disabled=false;$("#stopLoopBtn").disabled=true;$("#loopState").textContent="Tamamlandı ✓";
     if("vibrate"in navigator){try{navigator.vibrate([100,60,160])}catch{}}
     return;
   }
   const r=currentRange(),pause=Math.max(0,Number($("#pauseBetween").value)||0)*1000;
-  waiting=true;player.pauseVideo();
-  setTimeout(()=>{if(!loopActive)return;player.seekTo(r.a,true);player.setPlaybackRate(Number($("#playbackRate").value)||1);player.playVideo();waiting=false},pause);
+  waiting=true;mediaPause();
+  setTimeout(()=>{
+    if(!loopActive)return;
+    mediaSeek(r.a);mediaSetRate($("#playbackRate").value);mediaPlay();waiting=false;
+  },pause);
 }
 function stopLoop(updateLabel=true){
   loopActive=false;waiting=false;clearInterval(loopTimer);loopTimer=null;
@@ -119,8 +170,9 @@ function stopLoop(updateLabel=true){
   if(updateLabel)$("#loopState").textContent="Durduruldu";
   updateRangeStatus();
 }
+
 function openSaveDialog(){
-  if(!currentVideoId){showError("Önce bir video aç.");return}
+  if(!mediaLoaded()){showError("Önce bir video veya ses aç.");return}
   const r=currentRange();
   if(!Number.isFinite(r.a)||!Number.isFinite(r.b)||r.b<=r.a){showError("Kaydetmeden önce A ve B aralığını kontrol et.");return}
   $("#presetTitle").value="";
@@ -130,22 +182,34 @@ function openSaveDialog(){
 function savePreset(){
   const r=currentRange(),title=$("#presetTitle").value.trim()||("Bölüm "+String(state.presets.length+1));
   state.presets.unshift({
-    id:(crypto.randomUUID?crypto.randomUUID():String(Date.now())),
-    title:title,videoId:currentVideoId,a:r.a,b:r.b,
+    id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),
+    title,
+    sourceType:currentMediaType,
+    sourceId:currentMediaType==="local"?currentOfflineId:currentVideoId,
+    videoId:currentMediaType==="youtube"?currentVideoId:"",
+    a:r.a,b:r.b,
     repeats:Math.max(1,Number($("#repeatCount").value)||1),
-    rate:Number($("#playbackRate").value)||1,pause:Number($("#pauseBetween").value)||0,createdAt:Date.now()
+    rate:Number($("#playbackRate").value)||1,
+    pause:Number($("#pauseBetween").value)||0,
+    createdAt:Date.now()
   });
   store.set("ylp_presets",state.presets);renderPresets();
 }
-function usePreset(p){
+async function usePreset(p){
   $("#startTime").value=formatTime(p.a);$("#endTime").value=formatTime(p.b);
   $("#repeatCount").value=p.repeats;$("#playbackRate").value=String(p.rate);$("#pauseBetween").value=String(p.pause||0);
-  updateRangeStatus();if(currentVideoId!==p.videoId)loadVideo(p.videoId,false);
+  updateRangeStatus();
+  const type=p.sourceType||(p.videoId?"youtube":"");
+  if(type==="local")await loadOfflineMedia(p.sourceId);
+  else loadVideo(p.sourceId||p.videoId,false);
 }
 function deletePreset(id){state.presets=state.presets.filter(p=>p.id!==id);store.set("ylp_presets",state.presets);renderPresets()}
 function renderPresets(){
   const list=$("#presetList");$("#presetEmpty").classList.toggle("hidden",state.presets.length>0);
-  list.innerHTML=state.presets.map(p=>'<article class="preset-card"><div class="preset-main"><div><div class="preset-title">'+escapeHtml(p.title)+'</div><div class="preset-meta">'+formatTime(p.a)+' – '+formatTime(p.b)+' · '+p.repeats+' tekrar · '+p.rate+'×</div></div></div><div class="preset-actions"><button data-use="'+p.id+'">Aç</button><button data-delete="'+p.id+'">Sil</button></div></article>').join("");
+  list.innerHTML=state.presets.map(p=>{
+    const type=p.sourceType||(p.videoId?"youtube":"");
+    return '<article class="preset-card"><div class="preset-main"><div><div class="preset-title">'+escapeHtml(p.title)+'</div><div class="preset-meta">'+(type==="local"?"Çevrimdışı · ":"YouTube · ")+formatTime(p.a)+' – '+formatTime(p.b)+' · '+p.repeats+' tekrar · '+p.rate+'×</div></div></div><div class="preset-actions"><button data-use="'+p.id+'">Aç</button><button data-delete="'+p.id+'">Sil</button></div></article>'
+  }).join("");
   list.querySelectorAll("[data-use]").forEach(b=>b.onclick=()=>usePreset(state.presets.find(p=>p.id===b.dataset.use)));
   list.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>deletePreset(b.dataset.delete));
 }
@@ -153,6 +217,77 @@ function renderRecent(){
   const list=$("#recentList");$("#recentEmpty").classList.toggle("hidden",state.recent.length>0);
   list.innerHTML=state.recent.map(r=>'<article class="recent-item"><div class="recent-main"><div><div class="recent-title">YouTube video</div><div class="recent-meta">'+escapeHtml(r.videoId)+'</div></div></div><div class="recent-actions"><button data-recent="'+r.videoId+'">Aç</button></div></article>').join("");
   list.querySelectorAll("[data-recent]").forEach(b=>b.onclick=()=>loadVideo(b.dataset.recent,false));
+}
+
+/* Offline media: files are stored as blobs in IndexedDB. */
+const DB_NAME="youtube-loop-player-db",DB_VERSION=1,MEDIA_STORE="media";
+function openMediaDb(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(DB_NAME,DB_VERSION);
+    req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(MEDIA_STORE))db.createObjectStore(MEDIA_STORE,{keyPath:"id"})};
+    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+  });
+}
+async function dbPutMedia(item){
+  const db=await openMediaDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(MEDIA_STORE,"readwrite");tx.objectStore(MEDIA_STORE).put(item);
+    tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);
+  });
+}
+async function dbGetMedia(id){
+  const db=await openMediaDb();
+  return new Promise((resolve,reject)=>{
+    const req=db.transaction(MEDIA_STORE,"readonly").objectStore(MEDIA_STORE).get(id);
+    req.onsuccess=()=>resolve(req.result||null);req.onerror=()=>reject(req.error);
+  });
+}
+async function dbListMedia(){
+  const db=await openMediaDb();
+  return new Promise((resolve,reject)=>{
+    const req=db.transaction(MEDIA_STORE,"readonly").objectStore(MEDIA_STORE).getAll();
+    req.onsuccess=()=>resolve((req.result||[]).sort((a,b)=>b.createdAt-a.createdAt));req.onerror=()=>reject(req.error);
+  });
+}
+async function dbDeleteMedia(id){
+  const db=await openMediaDb();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(MEDIA_STORE,"readwrite");tx.objectStore(MEDIA_STORE).delete(id);
+    tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);
+  });
+}
+async function importOfflineFile(file){
+  if(!file)return;
+  const id=crypto.randomUUID?crypto.randomUUID():String(Date.now());
+  await dbPutMedia({id,name:file.name,type:file.type||"application/octet-stream",size:file.size,blob:file,createdAt:Date.now()});
+  await renderOfflineMedia();await loadOfflineMedia(id);
+}
+async function loadOfflineMedia(id){
+  const item=await dbGetMedia(id);
+  if(!item){showError("Çevrimdışı medya bulunamadı.");return}
+  stopLoop(false);releaseObjectUrl();
+  currentMediaType="local";currentOfflineId=id;currentVideoId="";
+  if(playerReady&&player){try{player.pauseVideo()}catch{}}
+  $("#player").classList.add("hidden");$("#emptyPlayer").classList.add("hidden");
+  currentObjectUrl=URL.createObjectURL(item.blob);
+  localPlayer.src=currentObjectUrl;localPlayer.classList.remove("hidden");localPlayer.load();
+  $("#loopState").textContent="Çevrimdışı medya hazır";showError("");
+}
+async function deleteOfflineMedia(id){
+  if(currentMediaType==="local"&&currentOfflineId===id){
+    stopLoop(false);localPlayer.pause();localPlayer.removeAttribute("src");localPlayer.load();localPlayer.classList.add("hidden");releaseObjectUrl();
+    currentMediaType="";currentOfflineId="";$("#emptyPlayer").classList.remove("hidden");
+  }
+  await dbDeleteMedia(id);
+  state.presets=state.presets.filter(p=>!(p.sourceType==="local"&&p.sourceId===id));
+  store.set("ylp_presets",state.presets);renderPresets();await renderOfflineMedia();
+}
+async function renderOfflineMedia(){
+  const items=await dbListMedia(),list=$("#offlineList");
+  $("#offlineEmpty").classList.toggle("hidden",items.length>0);
+  list.innerHTML=items.map(item=>'<article class="offline-item"><div class="offline-main"><div><div class="offline-title">'+escapeHtml(item.name)+'</div><div class="offline-meta">'+escapeHtml(item.type||"medya")+' · '+formatBytes(item.size)+'</div></div></div><div class="offline-actions"><button data-offline-open="'+item.id+'">Aç</button><button data-offline-delete="'+item.id+'">Sil</button></div></article>').join("");
+  list.querySelectorAll("[data-offline-open]").forEach(b=>b.onclick=()=>loadOfflineMedia(b.dataset.offlineOpen));
+  list.querySelectorAll("[data-offline-delete]").forEach(b=>b.onclick=()=>deleteOfflineMedia(b.dataset.offlineDelete));
 }
 
 $("#loadBtn").onclick=()=>loadVideo($("#videoUrl").value,false);
@@ -163,9 +298,12 @@ document.querySelectorAll("[data-nudge-end]").forEach(b=>b.onclick=()=>nudge("b"
 $("#startLoopBtn").onclick=startLoop;$("#stopLoopBtn").onclick=()=>stopLoop(true);
 $("#savePresetBtn").onclick=openSaveDialog;$("#confirmSavePreset").addEventListener("click",savePreset);
 ["#startTime","#endTime","#repeatCount"].forEach(s=>$(s).addEventListener("input",updateRangeStatus));
-$("#playbackRate").addEventListener("change",()=>{if(playerReady&&player)player.setPlaybackRate(Number($("#playbackRate").value)||1)});
+$("#playbackRate").addEventListener("change",()=>mediaSetRate($("#playbackRate").value));
+$("#offlineFileInput").addEventListener("change",async e=>{const f=e.target.files?.[0];if(f){try{await importOfflineFile(f)}catch(err){showError("Dosya kaydedilemedi: "+(err?.message||"bilinmeyen hata"))}e.target.value=""}});
+localPlayer.addEventListener("ended",()=>{if(currentMediaType==="local"&&loopActive)handleLoopBoundary()});
+
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstallPrompt=e;$("#installBtn").classList.remove("hidden")});
 $("#installBtn").onclick=async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$("#installBtn").classList.add("hidden")};
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=1");
-renderPresets();renderRecent();updateRangeStatus();
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=2");
+renderPresets();renderRecent();renderOfflineMedia();updateRangeStatus();
