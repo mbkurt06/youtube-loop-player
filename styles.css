@@ -12,3 +12,13 @@ label{display:grid;gap:7px;font-weight:700}input,select{width:100%;border:1px so
 .section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.section-head h2{margin:0;font-size:19px}.preset-list,.recent-list{display:grid;gap:10px;margin-top:14px}.preset-card,.recent-item{border:1px solid var(--border);border-radius:14px;padding:12px;display:grid;gap:8px;background:#fff}.preset-main,.recent-main{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.preset-title,.recent-title{font-weight:800}.preset-meta,.recent-meta{color:var(--muted);font-size:13px}.preset-actions,.recent-actions{display:flex;gap:8px;flex-wrap:wrap}.preset-actions button,.recent-actions button{background:#fff}.muted{color:var(--muted)}.error{color:#b91c1c;margin:10px 0 0}
 dialog{border:0;border-radius:20px;padding:0;width:min(92vw,460px);box-shadow:0 30px 80px #0005}dialog::backdrop{background:#0008}.dialog-card{padding:18px;display:grid;gap:16px}.dialog-head{display:flex;align-items:center;justify-content:space-between}.icon-btn{border:0;background:transparent;font-size:28px}.dialog-summary{background:#f9fafb;border:1px solid var(--border);border-radius:12px;padding:12px;color:var(--muted)}
 @media(max-width:680px){.topbar{align-items:center}.topbar p{display:none}.url-row{display:grid}.url-row button{width:100%}.time-grid,.settings-grid,.status-panel{grid-template-columns:1fr}.time-row{display:grid;grid-template-columns:1fr auto}.loop-actions{position:sticky;bottom:max(8px,env(safe-area-inset-bottom));z-index:5;background:#ffffffee;padding:8px;border-radius:16px;backdrop-filter:blur(10px)}.section-head{align-items:center}}
+#localPlayer{width:100%;height:100%;background:#000;object-fit:contain}
+.offline-list{display:grid;gap:10px;margin-top:14px}
+.offline-item{border:1px solid var(--border);border-radius:14px;padding:12px;background:#fff;display:grid;gap:8px}
+.offline-main{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.offline-title{font-weight:800;overflow-wrap:anywhere}
+.offline-meta{color:var(--muted);font-size:13px}
+.offline-actions{display:flex;gap:8px;flex-wrap:wrap}
+.offline-actions button{background:#fff;border:1px solid var(--border);border-radius:12px;padding:9px 12px;font-weight:700}
+.file-button{display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.tiny{font-size:12px;line-height:1.45}
