@@ -25,3 +25,8 @@ dialog{border:0;border-radius:20px;padding:0;width:min(92vw,460px);box-shadow:0 
 
 .download-box{margin-top:14px;padding:12px;border:1px dashed var(--border);border-radius:14px;background:#f9fafb}
 .download-box label{margin-bottom:8px}
+
+.youtube-download-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;flex-wrap:wrap}
+.download-consent{display:flex;grid-template-columns:none;align-items:center;gap:8px;font-weight:600;color:var(--muted)}
+.download-consent input{width:auto}
+@media(max-width:680px){.youtube-download-row{align-items:stretch}.youtube-download-row .secondary{width:100%}}
