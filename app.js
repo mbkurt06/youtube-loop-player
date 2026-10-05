@@ -498,5 +498,6 @@ localPlayer.addEventListener("ended",()=>{if(currentMediaType==="local"&&loopAct
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstallPrompt=e;$("#installBtn").classList.remove("hidden")});
 $("#installBtn").onclick=async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$("#installBtn").classList.add("hidden")};
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=6");
-renderSavedVideos();renderPresets();renderOfflineMedia();updateRangeStatus();checkServerStatus();
+$("#secondaryTools")?.addEventListener("toggle",e=>{if(e.currentTarget.open)checkServerStatus()});
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=7");
+renderSavedVideos();renderPresets();renderOfflineMedia();updateRangeStatus();
