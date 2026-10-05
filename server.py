@@ -95,8 +95,23 @@ class Handler(SimpleHTTPRequestHandler):
                 cookie_browser = "none"
 
             with tempfile.TemporaryDirectory(prefix="yt-loop-") as tmp:
+                has_ffmpeg = bool(shutil.which("ffmpeg"))
+                if has_ffmpeg:
+                    # Prefer a Safari/iPhone-friendly H.264 + M4A pair, then progressively
+                    # relax the selector. The old selector required one combined MP4 stream,
+                    # which many current YouTube videos no longer expose.
+                    format_selector = (
+                        "bv*[vcodec^=avc1]+ba[ext=m4a]/"
+                        "b[ext=mp4][vcodec^=avc1]/"
+                        "bv*+ba/"
+                        "b"
+                    )
+                else:
+                    # Without ffmpeg we cannot merge separate video/audio streams.
+                    format_selector = "b[ext=mp4]/b"
+
                 opts = {
-                    "format": "best[ext=mp4][vcodec!=none][acodec!=none]/best[vcodec!=none][acodec!=none]/best",
+                    "format": format_selector,
                     "outtmpl": os.path.join(tmp, "%(id)s.%(ext)s"),
                     "noplaylist": True,
                     "quiet": True,
@@ -104,6 +119,8 @@ class Handler(SimpleHTTPRequestHandler):
                     "restrictfilenames": True,
                     "js_runtimes": runtimes,
                 }
+                if has_ffmpeg:
+                    opts["merge_output_format"] = "mp4"
                 if cookie_browser != "none":
                     opts["cookiesfrombrowser"] = (cookie_browser,)
 
