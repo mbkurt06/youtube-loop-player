@@ -10,7 +10,7 @@
 <title>YouTube Loop Player</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=15">
+<link rel="stylesheet" href="./styles.css?v=16">
 </head>
 <body>
 <main class="app">
@@ -87,7 +87,7 @@
       </div>
       <label class="manual-speed"><span>Manuel</span><input id="editSpeedManual" type="number" min="0.25" max="2" step="0.05" value="1"></label>
     </div>
-    <div class="loop-actions"><button id="startLoopBtn" class="primary big">▶ Tekrarı başlat</button><button id="stopLoopBtn" class="secondary big" disabled>■ Durdur</button></div>
+    <div class="loop-actions"><button id="startLoopBtn" class="primary big">▶ Tekrarı başlat</button><button id="stopLoopBtn" class="secondary big" disabled>⏸ Dur</button></div>
     <div class="status-panel"><div><span class="status-label">Tekrar</span><strong id="repeatStatus">0 / 10</strong></div><div><span class="status-label">Aralık</span><strong id="rangeStatus">0:00 – 0:10</strong></div><div><span class="status-label">Durum</span><strong id="loopState">Hazır</strong></div></div>
   </section>
 
@@ -130,7 +130,7 @@
   </section>
 
   <section class="card simple-player-controls">
-    <div class="loop-actions"><button id="playPresetBtn" class="primary big" disabled>▶ Tekrarı oynat</button><button id="playStopBtn" class="secondary big" disabled>■ Durdur</button></div>
+    <div class="loop-actions"><button id="playPresetBtn" class="primary big" disabled>▶ Tekrarı oynat</button><button id="playStopBtn" class="secondary big" disabled>⏸ Dur</button></div>
     <div class="simple-status"><strong id="playRepeatStatus">0 / 0</strong><span id="playLoopState">Hazır</span></div>
     <div class="speed-panel play-speed-panel">
       <span class="speed-title">Oynatma hızı</span>
@@ -153,6 +153,6 @@
 <dialog id="saveDialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><strong>Bölümü kaydet</strong><button value="cancel" class="icon-btn">×</button></div><label><span>Başlık</span><input id="presetTitle" type="text" placeholder="Örn. 1. bölüm"></label><div class="dialog-summary" id="presetSummary"></div><button id="confirmSavePreset" value="default" class="primary">Kaydet</button></form></dialog>
 
 <script src="https://www.youtube.com/iframe_api"></script>
-<script src="./app.js?v=15" defer></script>
+<script src="./app.js?v=16" defer></script>
 </body>
 </html>
