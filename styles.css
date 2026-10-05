@@ -197,3 +197,22 @@ dialog{border:0;border-radius:20px;padding:0;width:min(92vw,460px);box-shadow:0 
   .speed-buttons{grid-template-columns:repeat(3,1fr)}
   .manual-speed{grid-template-columns:1fr}
 }
+
+
+/* v14: playback preset navigation */
+.preset-nav{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-top:2px;
+}
+.preset-nav button{
+  border:1px solid var(--border);
+  background:var(--card);
+  color:var(--text);
+  border-radius:12px;
+  padding:10px 12px;
+  font-weight:800;
+}
+.simple-player-controls .loop-actions{margin-top:0}
+.simple-player-controls .speed-panel{margin-top:0}
