@@ -15,7 +15,6 @@ let deferredInstallPrompt=null;
 let activeScreen="edit";
 
 const localPlayer=$("#localPlayer");
-const playerShell=$("#sharedPlayerShell");
 
 const store={
   get(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}},
@@ -150,18 +149,12 @@ function toggleTheme(){
   applyTheme();
 }
 
-function movePlayerTo(screen){
-  const host=$(screen==="play"?"#playPlayerHost":"#editPlayerHost");
-  if(host&&playerShell.parentElement!==host)host.appendChild(playerShell);
-}
-
 function switchScreen(screen){
   activeScreen=screen;
   $("#editScreen").classList.toggle("active",screen==="edit");
   $("#playScreen").classList.toggle("active",screen==="play");
   $("#editTabBtn").classList.toggle("active",screen==="edit");
   $("#playTabBtn").classList.toggle("active",screen==="play");
-  movePlayerTo(screen);
   if(screen==="play"){
     renderPlaySelectors();
     syncPlayControls();
@@ -181,7 +174,11 @@ window.onYouTubeIframeAPIReady=()=>{
           if(e.data===YT.PlayerState.ENDED&&loopActive)handleLoopBoundary();
         }
       },
-      onError:()=>showError("Bu video gömülü oynatmaya izin vermiyor veya açılamıyor.")
+      onError:e=>{
+        const code=e?.data;
+        const detail=code===2?"Geçersiz video bağlantısı.":code===5?"YouTube oynatıcı geçici olarak videoyu yükleyemedi.":(code===100?"Video bulunamadı veya kaldırılmış.":((code===101||code===150)?"Bu video başka sitelerde oynatmaya izin vermiyor.":"YouTube oynatma hatası oluştu."));
+        showError(detail+" Başka bir video seçip tekrar deneyebilirsin.");
+      }
     }
   });
 };
@@ -278,7 +275,13 @@ function loadVideo(input,autoplay=false){
   $("#videoUrl").value="https://www.youtube.com/watch?v="+id;
   localPlayer.pause();localPlayer.removeAttribute("src");localPlayer.load();localPlayer.classList.add("hidden");
   $("#player").classList.remove("hidden");$("#emptyPlayer").classList.add("hidden");showError("");
-  if(autoplay)player.loadVideoById(id);else player.cueVideoById(id);
+  const videoData=player.getVideoData?.();
+  const alreadyLoaded=videoData?.video_id===id;
+  if(!alreadyLoaded){
+    if(autoplay)player.loadVideoById(id);else player.cueVideoById(id);
+  }else if(autoplay){
+    player.playVideo();
+  }
   addHistory(id);
   renderSavedVideos();
   renderPresets();
@@ -704,7 +707,6 @@ $("#installBtn").onclick=async()=>{if(!deferredInstallPrompt)return;deferredInst
 $("#secondaryTools")?.addEventListener("toggle",e=>{if(e.currentTarget.open)checkServerStatus()});
 
 applyTheme();
-movePlayerTo("edit");
 renderSavedVideos();
 renderHistory();
 renderPresets();
@@ -712,4 +714,4 @@ renderPlaySelectors();
 renderOfflineMedia();
 updateRangeStatus();
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=10");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=11");
