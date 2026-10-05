@@ -758,4 +758,4 @@ renderPlaySelectors();
 renderOfflineMedia();
 updateRangeStatus();
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=12");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=13");
