@@ -10,7 +10,7 @@
 <title>YouTube Loop Player</title>
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=17">
+<link rel="stylesheet" href="./styles.css?v=18">
 </head>
 <body>
 <main class="app">
@@ -152,7 +152,9 @@
 
 <dialog id="saveDialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><strong>Bölümü kaydet</strong><button value="cancel" class="icon-btn">×</button></div><label><span>Bölüm numarası</span><input id="presetTitle" type="number" inputmode="numeric" min="1" step="1" placeholder="1"></label><div class="dialog-summary" id="presetSummary"></div><button id="confirmSavePreset" value="default" class="primary">Kaydet</button></form></dialog>
 
+<dialog id="editPresetDialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><strong>Bölümü düzenle</strong><button value="cancel" class="icon-btn">×</button></div><label><span>Bölüm numarası</span><input id="editPresetNumber" type="number" inputmode="numeric" min="1" step="1"></label><div class="time-grid"><label><span>Başlangıç (A)</span><input id="editPresetStart" type="text" inputmode="decimal" placeholder="0:00"></label><label><span>Bitiş (B)</span><input id="editPresetEnd" type="text" inputmode="decimal" placeholder="0:10"></label></div><p id="editPresetError" class="error hidden"></p><button id="confirmEditPreset" value="default" class="primary">Değişiklikleri kaydet</button></form></dialog>
+
 <script src="https://www.youtube.com/iframe_api"></script>
-<script src="./app.js?v=17" defer></script>
+<script src="./app.js?v=18" defer></script>
 </body>
 </html>
