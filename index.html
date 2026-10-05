@@ -7,51 +7,28 @@
 <meta name="apple-mobile-web-app-title" content="Loop Player">
 <title>YouTube Loop Player</title>
 <link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=5">
+<link rel="stylesheet" href="./styles.css?v=6">
 </head>
 <body>
 <main class="app">
 <header class="topbar"><div><h1>YouTube Loop Player</h1><p>A–B aralığını istediğin kadar tekrar et.</p></div><button id="installBtn" class="ghost hidden">Ana ekrana ekle</button></header>
-<section class="card"><label for="videoUrl">YouTube bağlantısı</label><div class="url-row"><input id="videoUrl" type="url" inputmode="url" autocomplete="off" placeholder="https://www.youtube.com/watch?v=..."><button id="loadBtn" class="primary">Videoyu aç</button></div>
-<div class="youtube-download-row">
-  <label class="download-consent"><input id="downloadConsent" type="checkbox"> Bu videoyu çevrimdışı kaydetme hakkım var.</label>
-  <label class="session-select"><span>YouTube oturumu</span>
-    <select id="cookieBrowser">
-      <option value="none">Kullanmadan dene</option>
-      <option value="safari">Safari</option>
-      <option value="chrome">Chrome</option>
-      <option value="firefox">Firefox</option>
-    </select>
-  </label>
-  <button id="youtubeDownloadBtn" class="secondary">YouTube’dan indir</button>
-</div>
-<p id="youtubeDownloadStatus" class="muted tiny"></p>
-<p id="serverStatus" class="muted tiny"></p>
-<p id="loadError" class="error hidden"></p></section>
-<section class="player-shell"><div id="player"></div><video id="localPlayer" class="hidden" controls playsinline></video><div id="emptyPlayer" class="empty-player"><strong>Bir YouTube videosu aç veya yerel medya seç</strong><span>Çevrimdışı kullanım için kendi video/ses dosyanı içe aktarabilirsin.</span></div></section>
-<section class="card offline-card">
-  <div class="section-head">
-    <div><h2>Çevrimdışı medya</h2><p>Kendi MP4, M4A, MP3 veya uyumlu medya dosyanı telefona kaydet.</p></div>
-    <label class="secondary file-button">+ Dosya ekle<input id="offlineFileInput" type="file" accept="video/*,audio/*" hidden></label>
-  </div>
-  <div class="download-box">
-    <label for="directMediaUrl">Doğrudan medya bağlantısı</label>
-    <div class="url-row">
-      <input id="directMediaUrl" type="url" inputmode="url" autocomplete="off" placeholder="https://site.example/video.mp4">
-      <button id="downloadMediaBtn" class="secondary">İndir ve kaydet</button>
-    </div>
-    <p id="downloadStatus" class="muted tiny"></p>
-  </div>
-  <div id="offlineList" class="offline-list"></div>
-  <p id="offlineEmpty" class="muted">Henüz çevrimdışı medya eklenmedi.</p>
-  <p class="muted tiny">YouTube bağlantısından dosya çıkarmıyoruz. “İndir ve kaydet” doğrudan MP4/MP3/M4A gibi medya URL’leri içindir; YouTube için dosyayı yasal olarak edindikten sonra “Dosya ekle”yi kullanabilirsin.</p>
+<section class="card"><label for="videoUrl">YouTube bağlantısı</label><div class="url-row"><input id="videoUrl" type="url" inputmode="url" autocomplete="off" placeholder="https://www.youtube.com/watch?v=..."><button id="loadBtn" class="primary">Videoyu aç</button></div><p class="muted tiny">Açtığın YouTube bağlantıları otomatik olarak kayıtlı videolar listesine eklenir.</p><p id="loadError" class="error hidden"></p></section>
+<section class="card">
+  <div class="section-head"><div><h2>Kayıtlı YouTube videoları</h2><p>Videoyu listeden seç; yalnız o videoya ait tekrar bölümleri gösterilir.</p></div></div>
+  <div id="savedVideoList" class="saved-video-list"></div>
+  <p id="savedVideoEmpty" class="muted">Henüz kayıtlı YouTube videosu yok.</p>
 </section>
+<section class="player-shell"><div id="player"></div><video id="localPlayer" class="hidden" controls playsinline></video><div id="emptyPlayer" class="empty-player"><strong>Bir YouTube videosu aç veya yerel medya seç</strong><span>Çevrimdışı kullanım için kendi video/ses dosyanı içe aktarabilirsin.</span></div></section>
+
 <section class="card controls-card">
 <div class="time-grid">
 <div class="time-box"><label>Başlangıç (A)</label><div class="time-row"><input id="startTime" type="text" inputmode="decimal" value="0:00"><button id="setStartBtn" class="secondary">Şimdiki zaman</button></div></div>
 <div class="time-box"><label>Bitiş (B)</label><div class="time-row"><input id="endTime" type="text" inputmode="decimal" value="0:10"><button id="setEndBtn" class="secondary">Şimdiki zaman</button></div></div>
 </div>
-<div class="nudge-row"><button data-nudge-start="-1">A −1 sn</button><button data-nudge-start="1">A +1 sn</button><button data-nudge-end="-1">B −1 sn</button><button data-nudge-end="1">B +1 sn</button></div>
+<div class="nudge-groups">
+  <div class="nudge-group"><span>A ince ayar</span><div class="nudge-row"><button data-nudge-start="-1">−1 sn</button><button data-nudge-start="-0.1">−0,1 sn</button><button data-nudge-start="0.1">+0,1 sn</button><button data-nudge-start="1">+1 sn</button></div></div>
+  <div class="nudge-group"><span>B ince ayar</span><div class="nudge-row"><button data-nudge-end="-1">−1 sn</button><button data-nudge-end="-0.1">−0,1 sn</button><button data-nudge-end="0.1">+0,1 sn</button><button data-nudge-end="1">+1 sn</button></div></div>
+</div>
 <div class="settings-grid">
 <label><span>Tekrar sayısı</span><input id="repeatCount" type="number" min="1" max="999" value="10"></label>
 <label><span>Hız</span><select id="playbackRate"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label>
@@ -60,9 +37,44 @@
 <div class="loop-actions"><button id="startLoopBtn" class="primary big">▶ Tekrarı başlat</button><button id="stopLoopBtn" class="secondary big" disabled>■ Durdur</button></div>
 <div class="status-panel"><div><span class="status-label">Tekrar</span><strong id="repeatStatus">0 / 10</strong></div><div><span class="status-label">Aralık</span><strong id="rangeStatus">0:00 – 0:10</strong></div><div><span class="status-label">Durum</span><strong id="loopState">Hazır</strong></div></div>
 </section>
-<section class="card"><div class="section-head"><div><h2>Kayıtlı bölümler</h2><p>Aynı videonun farklı kısımlarını ayrı ayrı kaydedebilirsin.</p></div><button id="savePresetBtn" class="secondary">+ Bölümü kaydet</button></div><div id="presetList" class="preset-list"></div><p id="presetEmpty" class="muted">Henüz kayıtlı bölüm yok.</p></section>
-<section class="card"><div class="section-head"><div><h2>Son videolar</h2><p>Son açtığın videolara hızlı dön.</p></div></div><div id="recentList" class="recent-list"></div><p id="recentEmpty" class="muted">Henüz video açılmadı.</p></section>
+<section class="card"><div class="section-head"><div><h2>Bu videonun tekrar bölümleri</h2><p>Seçili video için A–B aralıklarını ayrı ayrı kaydedebilirsin.</p></div><button id="savePresetBtn" class="secondary">+ Bölümü kaydet</button></div><div id="presetList" class="preset-list"></div><p id="presetEmpty" class="muted">Bu video için henüz kayıtlı bölüm yok.</p></section>
+<details class="card secondary-tools">
+  <summary>İndirme / çevrimdışı kullanım <span>ikinci plan</span></summary>
+  <div class="secondary-tools-body">
+    <h3>YouTube’dan indirme</h3>
+    <div class="youtube-download-row">
+      <label class="download-consent"><input id="downloadConsent" type="checkbox"> Bu videoyu çevrimdışı kaydetme hakkım var.</label>
+      <label class="session-select"><span>YouTube oturumu</span>
+        <select id="cookieBrowser">
+          <option value="none">Kullanmadan dene</option>
+          <option value="safari">Safari</option>
+          <option value="chrome">Chrome</option>
+          <option value="firefox">Firefox</option>
+        </select>
+      </label>
+      <button id="youtubeDownloadBtn" class="secondary">YouTube’dan indir</button>
+    </div>
+    <p id="youtubeDownloadStatus" class="muted tiny"></p>
+    <p id="serverStatus" class="muted tiny"></p>
+
+    <hr>
+    <div class="section-head">
+      <div><h3>Yerel çevrimdışı medya</h3><p>Kendi MP4, M4A, MP3 veya uyumlu medya dosyanı kaydet.</p></div>
+      <label class="secondary file-button">+ Dosya ekle<input id="offlineFileInput" type="file" accept="video/*,audio/*" hidden></label>
+    </div>
+    <div class="download-box">
+      <label for="directMediaUrl">Doğrudan medya bağlantısı</label>
+      <div class="url-row">
+        <input id="directMediaUrl" type="url" inputmode="url" autocomplete="off" placeholder="https://site.example/video.mp4">
+        <button id="downloadMediaBtn" class="secondary">İndir ve kaydet</button>
+      </div>
+      <p id="downloadStatus" class="muted tiny"></p>
+    </div>
+    <div id="offlineList" class="offline-list"></div>
+    <p id="offlineEmpty" class="muted">Henüz çevrimdışı medya eklenmedi.</p>
+  </div>
+</details>
 </main>
 <dialog id="saveDialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><strong>Bölümü kaydet</strong><button value="cancel" class="icon-btn">×</button></div><label><span>Başlık</span><input id="presetTitle" type="text" placeholder="Örn. Salât-ı Münciye 1. bölüm"></label><div class="dialog-summary" id="presetSummary"></div><button id="confirmSavePreset" value="default" class="primary">Kaydet</button></form></dialog>
-<script src="https://www.youtube.com/iframe_api"></script><script src="./app.js?v=5" defer></script>
+<script src="https://www.youtube.com/iframe_api"></script><script src="./app.js?v=6" defer></script>
 </body></html>
