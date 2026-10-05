@@ -301,6 +301,54 @@ async function importRemoteMedia(url){
   await renderOfflineMedia();
   await loadOfflineMedia(id);
 }
+
+function filenameFromDisposition(value){
+  const raw=String(value||"");
+  const utf=raw.match(/filename\*=UTF-8''([^;]+)/i);
+  if(utf){try{return decodeURIComponent(utf[1])}catch{}}
+  const plain=raw.match(/filename="?([^";]+)"?/i);
+  return plain?plain[1]:"youtube-video.mp4";
+}
+async function downloadYouTubeForOffline(){
+  const url=$("#videoUrl").value.trim();
+  const status=$("#youtubeDownloadStatus");
+  if(!parseVideoId(url)){showError("Önce geçerli bir YouTube bağlantısı gir.");return}
+  if(!$("#downloadConsent").checked){showError("Bu videoyu çevrimdışı kaydetme hakkın olduğunu onayla.");return}
+
+  const btn=$("#youtubeDownloadBtn");
+  btn.disabled=true;showError("");status.textContent="YouTube videosu indiriliyor…";
+  try{
+    const res=await fetch("./api/youtube-download",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({url,authorized:true})
+    });
+    if(!res.ok){
+      let message="YouTube indirmesi başarısız.";
+      try{const data=await res.json();if(data.error)message=data.error}catch{}
+      throw new Error(message);
+    }
+    const blob=await res.blob();
+    const name=filenameFromDisposition(res.headers.get("content-disposition"));
+    const id=crypto.randomUUID?crypto.randomUUID():String(Date.now());
+    await dbPutMedia({
+      id,name,type:blob.type||"video/mp4",size:blob.size,blob,
+      sourceUrl:url,sourceType:"youtube-download",createdAt:Date.now()
+    });
+    status.textContent="Kaydedildi: "+name+" · "+formatBytes(blob.size);
+    await renderOfflineMedia();
+    await loadOfflineMedia(id);
+  }catch(err){
+    status.textContent="";
+    const msg=err?.message||"YouTube videosu indirilemedi.";
+    if(msg.includes("Failed to fetch")){
+      showError("YouTube indirme sunucusuna ulaşılamadı. Uygulamayı ‘python3 server.py 8081’ ile başlat.");
+    }else showError(msg);
+  }finally{
+    btn.disabled=false;
+  }
+}
+
 async function loadOfflineMedia(id){
   const item=await dbGetMedia(id);
   if(!item){showError("Çevrimdışı medya bulunamadı.");return}
@@ -330,6 +378,7 @@ async function renderOfflineMedia(){
 }
 
 $("#loadBtn").onclick=()=>loadVideo($("#videoUrl").value,false);
+$("#youtubeDownloadBtn").onclick=downloadYouTubeForOffline;
 $("#videoUrl").addEventListener("keydown",e=>{if(e.key==="Enter")loadVideo(e.currentTarget.value,false)});
 $("#setStartBtn").onclick=()=>setPoint("a");$("#setEndBtn").onclick=()=>setPoint("b");
 document.querySelectorAll("[data-nudge-start]").forEach(b=>b.onclick=()=>nudge("a",Number(b.dataset.nudgeStart)));
@@ -351,5 +400,5 @@ localPlayer.addEventListener("ended",()=>{if(currentMediaType==="local"&&loopAct
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstallPrompt=e;$("#installBtn").classList.remove("hidden")});
 $("#installBtn").onclick=async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$("#installBtn").classList.add("hidden")};
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=3");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=4");
 renderPresets();renderRecent();renderOfflineMedia();updateRangeStatus();
