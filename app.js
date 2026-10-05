@@ -394,6 +394,7 @@ function handleLoopBoundary(){
     clearTimeout(loopRestartTimer);loopRestartTimer=null;
     forcePauseMedia();
     setLoopButtons(false);
+    syncPlayControls();
     $("#loopState").textContent="Tamamlandı ✓";
     $("#playLoopState").textContent="Tamamlandı ✓";
     if("vibrate"in navigator){try{navigator.vibrate([100,60,160])}catch{}}
@@ -431,6 +432,7 @@ function stopLoop(updateLabel=true){
   clearTimeout(loopRestartTimer);loopRestartTimer=null;
   forcePauseMedia();
   setLoopButtons(false);
+  syncPlayControls();
   if(updateLabel){
     $("#loopState").textContent="Durduruldu";
     $("#playLoopState").textContent="Durduruldu";
@@ -529,22 +531,32 @@ function renderPlaySelectors(){
 function renderPlayPresets(){
   const videoId=$("#playVideoSelect").value;
   const presetSel=$("#playPresetSelect");
+  const previousSelection=presetSel.value;
   const list=videoId?presetsForVideo(videoId):[];
+
   presetSel.disabled=!videoId||!list.length;
-  presetSel.innerHTML=!videoId?'<option value="">Önce video seç…</option>':(!list.length?'<option value="">Bu videoda kayıtlı bölüm yok</option>':'<option value="">Bölüm seç…</option>'+list.map(p=>'<option value="'+escapeHtml(p.id)+'">'+escapeHtml(p.title)+' · '+formatTime(p.a)+'–'+formatTime(p.b)+'</option>').join(""));
-  $("#playPresetBtn").disabled=true;
-  $("#playSelectedInfo").textContent=!videoId?"Bir video ve tekrar bölümü seç.":(!list.length?"Bu video için henüz kayıtlı tekrar bölümü yok.":"Tekrar bölümünü seç.");
+  presetSel.innerHTML=!videoId
+    ?'<option value="">Önce video seç…</option>'
+    :(!list.length
+      ?'<option value="">Bu videoda kayıtlı bölüm yok</option>'
+      :'<option value="">Bölüm seç…</option>'+list.map(p=>'<option value="'+escapeHtml(p.id)+'">'+escapeHtml(p.title)+' · '+formatTime(p.a)+'–'+formatTime(p.b)+'</option>').join(""));
+
+  if(previousSelection&&list.some(p=>p.id===previousSelection)){
+    presetSel.value=previousSelection;
+  }
+
+  syncPlayControls();
 }
 
 function syncPlayControls(){
   const id=$("#playPresetSelect").value;
-  const p=state.presets.find(x=>x.id===id);
-  if(!p){
-    $("#playPresetBtn").disabled=true;
-    return;
-  }
-  $("#playPresetBtn").disabled=loopActive;
-  $("#playSelectedInfo").textContent=p.title+" · "+formatTime(p.a)+" – "+formatTime(p.b)+" · "+p.repeats+" tekrar";
+  const list=$("#playVideoSelect").value?presetsForVideo($("#playVideoSelect").value):[];
+  const index=list.findIndex(p=>p.id===id);
+  const hasSelection=index>=0;
+
+  $("#playPresetBtn").disabled=loopActive||!hasSelection;
+  $("#prevPresetBtn").disabled=!hasSelection||index<=0;
+  $("#nextPresetBtn").disabled=!hasSelection||index>=list.length-1;
 }
 
 function selectPlayVideo(videoId){
@@ -558,6 +570,26 @@ function selectPlayPreset(id){
   if(!p){syncPlayControls();return}
   usePreset(p,{play:false});
   syncPlayControls();
+}
+
+function navigatePlayPreset(direction){
+  const videoId=$("#playVideoSelect").value;
+  if(!videoId)return;
+  const list=presetsForVideo(videoId);
+  if(!list.length)return;
+
+  const currentId=$("#playPresetSelect").value;
+  let index=list.findIndex(p=>p.id===currentId);
+
+  if(index<0){
+    index=direction>0?0:list.length-1;
+  }else{
+    index=Math.max(0,Math.min(list.length-1,index+direction));
+  }
+
+  const next=list[index];
+  $("#playPresetSelect").value=next.id;
+  selectPlayPreset(next.id);
 }
 
 /* Offline media */
@@ -728,6 +760,8 @@ $("#themeBtn").onclick=toggleTheme;
 
 $("#playVideoSelect").addEventListener("change",e=>selectPlayVideo(e.target.value));
 $("#playPresetSelect").addEventListener("change",e=>selectPlayPreset(e.target.value));
+$("#prevPresetBtn").onclick=()=>navigatePlayPreset(-1);
+$("#nextPresetBtn").onclick=()=>navigatePlayPreset(1);
 $("#playPresetBtn").onclick=()=>{
   const p=state.presets.find(x=>x.id===$("#playPresetSelect").value);
   if(p)usePreset(p,{play:true});
@@ -758,4 +792,4 @@ renderPlaySelectors();
 renderOfflineMedia();
 updateRangeStatus();
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=13");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=14");
