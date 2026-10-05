@@ -494,17 +494,54 @@ function pauseResumeLoop(){
   }
 }
 
+
+function presetNumber(p){
+  const n=Number(String(p?.title??"").trim());
+  return Number.isInteger(n)&&n>0?n:Number.MAX_SAFE_INTEGER;
+}
+function sortPresetsByNumber(list){
+  return [...list].sort((a,b)=>{
+    const na=presetNumber(a),nb=presetNumber(b);
+    if(na!==nb)return na-nb;
+    return (a.createdAt||0)-(b.createdAt||0);
+  });
+}
+function nextPresetNumberForCurrentMedia(){
+  let list=[];
+  if(currentMediaType==="youtube"&&currentVideoId)list=presetsForVideo(currentVideoId);
+  else if(currentMediaType==="local"&&currentOfflineId)list=state.presets.filter(p=>p.sourceType==="local"&&p.sourceId===currentOfflineId);
+  const nums=list.map(p=>presetNumber(p)).filter(n=>Number.isFinite(n)&&n!==Number.MAX_SAFE_INTEGER);
+  return nums.length?Math.max(...nums)+1:1;
+}
+
 function openSaveDialog(){
   if(!mediaLoaded()){showError("Önce bir video veya ses aç.");return}
   const r=currentRange();
   if(!Number.isFinite(r.a)||!Number.isFinite(r.b)||r.b<=r.a){showError("Kaydetmeden önce A ve B aralığını kontrol et.");return}
-  $("#presetTitle").value="";
-  $("#presetSummary").textContent=formatTime(r.a)+" – "+formatTime(r.b)+" · "+$("#repeatCount").value+" tekrar · "+$("#playbackRate").value+"×";
+  $("#presetTitle").value=String(nextPresetNumberForCurrentMedia());
+  $("#presetSummary").textContent="Bölüm "+$("#presetTitle").value+" · "+formatTime(r.a)+" – "+formatTime(r.b)+" · "+$("#repeatCount").value+" tekrar · "+$("#playbackRate").value+"×";
   $("#saveDialog").showModal();
 }
 
 function savePreset(){
-  const r=currentRange(),title=$("#presetTitle").value.trim()||("Bölüm "+String(state.presets.length+1));
+  const r=currentRange();
+  const raw=$("#presetTitle").value.trim();
+  const sectionNumber=Number(raw);
+  if(!Number.isInteger(sectionNumber)||sectionNumber<1){
+    showError("Bölüm numarası 1 veya daha büyük bir tam sayı olmalı.");
+    return;
+  }
+
+  let sameMedia=[];
+  if(currentMediaType==="youtube"&&currentVideoId)sameMedia=presetsForVideo(currentVideoId);
+  else if(currentMediaType==="local"&&currentOfflineId)sameMedia=state.presets.filter(p=>p.sourceType==="local"&&p.sourceId===currentOfflineId);
+
+  if(sameMedia.some(p=>presetNumber(p)===sectionNumber)){
+    showError("Bu video için "+sectionNumber+" numaralı bölüm zaten var.");
+    return;
+  }
+
+  const title=String(sectionNumber);
   state.presets.unshift({
     id:crypto.randomUUID?crypto.randomUUID():String(Date.now()),
     title,
@@ -556,21 +593,21 @@ function deletePreset(id){
 }
 
 function presetsForVideo(videoId){
-  return state.presets.filter(p=>{
+  return sortPresetsByNumber(state.presets.filter(p=>{
     const type=p.sourceType||(p.videoId?"youtube":"");
     return type==="youtube"&&(p.sourceId||p.videoId)===videoId;
-  });
+  }));
 }
 
 function renderPresets(){
   const list=$("#presetList");
   let visible=[];
   if(currentMediaType==="youtube"&&currentVideoId)visible=presetsForVideo(currentVideoId);
-  else if(currentMediaType==="local"&&currentOfflineId)visible=state.presets.filter(p=>p.sourceType==="local"&&p.sourceId===currentOfflineId);
+  else if(currentMediaType==="local"&&currentOfflineId)visible=sortPresetsByNumber(state.presets.filter(p=>p.sourceType==="local"&&p.sourceId===currentOfflineId));
 
   $("#presetEmpty").classList.toggle("hidden",visible.length>0);
   $("#presetEmpty").textContent=mediaLoaded()?"Bu video için henüz kayıtlı bölüm yok.":"Önce bir video aç.";
-  list.innerHTML=visible.map(p=>'<article class="preset-card"><div class="preset-main"><div><div class="preset-title">'+escapeHtml(p.title)+'</div><div class="preset-meta">'+formatTime(p.a)+' – '+formatTime(p.b)+' · '+p.repeats+' tekrar · '+p.rate+'×</div></div></div><div class="preset-actions"><button data-use="'+p.id+'">Aç</button><button data-play="'+p.id+'">Oynat</button><button data-delete="'+p.id+'">Sil</button></div></article>').join("");
+  list.innerHTML=visible.map(p=>'<article class="preset-card"><div class="preset-main"><div><div class="preset-title">Bölüm '+escapeHtml(p.title)+'</div><div class="preset-meta">'+formatTime(p.a)+' – '+formatTime(p.b)+' · '+p.repeats+' tekrar · '+p.rate+'×</div></div></div><div class="preset-actions"><button data-use="'+p.id+'">Aç</button><button data-play="'+p.id+'">Oynat</button><button data-delete="'+p.id+'">Sil</button></div></article>').join("");
   list.querySelectorAll("[data-use]").forEach(b=>b.onclick=()=>usePreset(state.presets.find(p=>p.id===b.dataset.use)));
   list.querySelectorAll("[data-play]").forEach(b=>b.onclick=()=>usePreset(state.presets.find(p=>p.id===b.dataset.play),{play:true}));
   list.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>deletePreset(b.dataset.delete));
@@ -595,7 +632,7 @@ function renderPlayPresets(){
     ?'<option value="">Önce video seç…</option>'
     :(!list.length
       ?'<option value="">Bu videoda kayıtlı bölüm yok</option>'
-      :'<option value="">Bölüm seç…</option>'+list.map(p=>'<option value="'+escapeHtml(p.id)+'">'+escapeHtml(p.title)+' · '+formatTime(p.a)+'–'+formatTime(p.b)+'</option>').join(""));
+      :'<option value="">Bölüm seç…</option>'+list.map(p=>'<option value="'+escapeHtml(p.id)+'">Bölüm '+escapeHtml(p.title)+' · '+formatTime(p.a)+'–'+formatTime(p.b)+'</option>').join(""));
 
   if(previousSelection&&list.some(p=>p.id===previousSelection)){
     presetSel.value=previousSelection;
@@ -853,4 +890,4 @@ renderPlaySelectors();
 renderOfflineMedia();
 updateRangeStatus();
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=16");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=17");
