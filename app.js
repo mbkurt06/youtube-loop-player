@@ -7,6 +7,7 @@ let currentOfflineId="";
 let currentMediaType="";
 let currentObjectUrl="";
 let loopTimer=null;
+let loopRestartTimer=null;
 let loopActive=false;
 let loopIteration=0;
 let waiting=false;
@@ -324,6 +325,7 @@ function startLoop(){
   if(err){showError(err);return}
   showError("");
   const r=currentRange();
+  clearTimeout(loopRestartTimer);loopRestartTimer=null;
   loopIteration=0;loopActive=true;waiting=false;
   setLoopButtons(true);
   $("#loopState").textContent="Tekrar ediyor";
@@ -347,9 +349,11 @@ function handleLoopBoundary(){
   const target=Math.max(1,Number($("#repeatCount").value)||1);
   loopIteration++;
   updateRangeStatus();
+
   if(loopIteration>=target){
     loopActive=false;
     clearInterval(loopTimer);loopTimer=null;
+    clearTimeout(loopRestartTimer);loopRestartTimer=null;
     forcePauseMedia();
     setLoopButtons(false);
     $("#loopState").textContent="Tamamlandı ✓";
@@ -357,19 +361,36 @@ function handleLoopBoundary(){
     if("vibrate"in navigator){try{navigator.vibrate([100,60,160])}catch{}}
     return;
   }
-  const r=currentRange(),pause=Math.max(0,Number($("#pauseBetween").value)||0)*1000;
+
+  const r=currentRange();
+  const pauseMs=Math.max(0,Number($("#pauseBetween").value)||0)*1000;
   waiting=true;
+
+  if(pauseMs===0){
+    mediaSeek(r.a);
+    mediaSetRate($("#playbackRate").value);
+    mediaPlay();
+    setTimeout(()=>{waiting=false},120);
+    return;
+  }
+
   forcePauseMedia();
-  setTimeout(()=>{
+  clearTimeout(loopRestartTimer);
+  loopRestartTimer=setTimeout(()=>{
+    loopRestartTimer=null;
     if(!loopActive)return;
-    mediaSeek(r.a);mediaSetRate($("#playbackRate").value);mediaPlay();waiting=false;
-  },pause);
+    mediaSeek(r.a);
+    mediaSetRate($("#playbackRate").value);
+    mediaPlay();
+    setTimeout(()=>{waiting=false},120);
+  },pauseMs);
 }
 
 function stopLoop(updateLabel=true){
   loopActive=false;
   waiting=false;
   clearInterval(loopTimer);loopTimer=null;
+  clearTimeout(loopRestartTimer);loopRestartTimer=null;
   forcePauseMedia();
   setLoopButtons(false);
   if(updateLabel){
@@ -691,4 +712,4 @@ renderPlaySelectors();
 renderOfflineMedia();
 updateRangeStatus();
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=9");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=10");
