@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-title" content="Loop Player">
 <title>YouTube Loop Player</title>
 <link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=2">
+<link rel="stylesheet" href="./styles.css?v=3">
 </head>
 <body>
 <main class="app">
@@ -19,9 +19,17 @@
     <div><h2>Çevrimdışı medya</h2><p>Kendi MP4, M4A, MP3 veya uyumlu medya dosyanı telefona kaydet.</p></div>
     <label class="secondary file-button">+ Dosya ekle<input id="offlineFileInput" type="file" accept="video/*,audio/*" hidden></label>
   </div>
+  <div class="download-box">
+    <label for="directMediaUrl">Doğrudan medya bağlantısı</label>
+    <div class="url-row">
+      <input id="directMediaUrl" type="url" inputmode="url" autocomplete="off" placeholder="https://site.example/video.mp4">
+      <button id="downloadMediaBtn" class="secondary">İndir ve kaydet</button>
+    </div>
+    <p id="downloadStatus" class="muted tiny"></p>
+  </div>
   <div id="offlineList" class="offline-list"></div>
   <p id="offlineEmpty" class="muted">Henüz çevrimdışı medya eklenmedi.</p>
-  <p class="muted tiny">YouTube videosunu doğrudan indirmiyoruz. Bu bölüm, kullanma hakkına sahip olduğun yerel medya dosyalarını cihazda saklar.</p>
+  <p class="muted tiny">YouTube bağlantısından dosya çıkarmıyoruz. “İndir ve kaydet” doğrudan MP4/MP3/M4A gibi medya URL’leri içindir; YouTube için dosyayı yasal olarak edindikten sonra “Dosya ekle”yi kullanabilirsin.</p>
 </section>
 <section class="card controls-card">
 <div class="time-grid">
@@ -41,5 +49,5 @@
 <section class="card"><div class="section-head"><div><h2>Son videolar</h2><p>Son açtığın videolara hızlı dön.</p></div></div><div id="recentList" class="recent-list"></div><p id="recentEmpty" class="muted">Henüz video açılmadı.</p></section>
 </main>
 <dialog id="saveDialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><strong>Bölümü kaydet</strong><button value="cancel" class="icon-btn">×</button></div><label><span>Başlık</span><input id="presetTitle" type="text" placeholder="Örn. Salât-ı Münciye 1. bölüm"></label><div class="dialog-summary" id="presetSummary"></div><button id="confirmSavePreset" value="default" class="primary">Kaydet</button></form></dialog>
-<script src="https://www.youtube.com/iframe_api"></script><script src="./app.js?v=2" defer></script>
+<script src="https://www.youtube.com/iframe_api"></script><script src="./app.js?v=3" defer></script>
 </body></html>
