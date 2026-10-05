@@ -262,6 +262,45 @@ async function importOfflineFile(file){
   await dbPutMedia({id,name:file.name,type:file.type||"application/octet-stream",size:file.size,blob:file,createdAt:Date.now()});
   await renderOfflineMedia();await loadOfflineMedia(id);
 }
+
+function fileNameFromUrl(url){
+  try{
+    const u=new URL(url);
+    const last=u.pathname.split("/").filter(Boolean).pop()||"indirilen-medya";
+    return decodeURIComponent(last.split("?")[0])||"indirilen-medya";
+  }catch{return"indirilen-medya"}
+}
+function isYouTubeUrl(url){
+  try{
+    const h=new URL(url).hostname.replace(/^www\./,"").toLowerCase();
+    return h==="youtube.com"||h.endsWith(".youtube.com")||h==="youtu.be";
+  }catch{return false}
+}
+async function importRemoteMedia(url){
+  const raw=String(url||"").trim();
+  if(!raw)throw new Error("Bir medya bağlantısı gir.");
+  if(isYouTubeUrl(raw))throw new Error("YouTube bağlantısından doğrudan dosya indirme desteklenmiyor. YouTube dışındaki doğrudan MP4/MP3/M4A bağlantısını kullan.");
+  const status=$("#downloadStatus");
+  status.textContent="İndiriliyor…";
+  const res=await fetch(raw,{mode:"cors"});
+  if(!res.ok)throw new Error("İndirme başarısız: HTTP "+res.status);
+  const blob=await res.blob();
+  const type=(blob.type||res.headers.get("content-type")||"").toLowerCase();
+  if(type && !type.startsWith("video/") && !type.startsWith("audio/") && !type.includes("octet-stream")){
+    throw new Error("Bu bağlantı doğrudan bir video veya ses dosyasına benzemiyor.");
+  }
+  const id=crypto.randomUUID?crypto.randomUUID():String(Date.now());
+  let name=fileNameFromUrl(raw);
+  if(!/\.[a-z0-9]{2,5}$/i.test(name)){
+    if(type.includes("mp4"))name+=".mp4";
+    else if(type.includes("mpeg"))name+=".mp3";
+    else if(type.includes("m4a"))name+=".m4a";
+  }
+  await dbPutMedia({id,name,type:type||"application/octet-stream",size:blob.size,blob,sourceUrl:raw,createdAt:Date.now()});
+  status.textContent="Kaydedildi: "+name+" · "+formatBytes(blob.size);
+  await renderOfflineMedia();
+  await loadOfflineMedia(id);
+}
 async function loadOfflineMedia(id){
   const item=await dbGetMedia(id);
   if(!item){showError("Çevrimdışı medya bulunamadı.");return}
@@ -300,10 +339,17 @@ $("#savePresetBtn").onclick=openSaveDialog;$("#confirmSavePreset").addEventListe
 ["#startTime","#endTime","#repeatCount"].forEach(s=>$(s).addEventListener("input",updateRangeStatus));
 $("#playbackRate").addEventListener("change",()=>mediaSetRate($("#playbackRate").value));
 $("#offlineFileInput").addEventListener("change",async e=>{const f=e.target.files?.[0];if(f){try{await importOfflineFile(f)}catch(err){showError("Dosya kaydedilemedi: "+(err?.message||"bilinmeyen hata"))}e.target.value=""}});
+$("#downloadMediaBtn").addEventListener("click",async()=>{
+  const btn=$("#downloadMediaBtn"),status=$("#downloadStatus");
+  btn.disabled=true;showError("");
+  try{await importRemoteMedia($("#directMediaUrl").value)}
+  catch(err){status.textContent="";showError(err?.message||"Medya indirilemedi.")}
+  finally{btn.disabled=false}
+});
 localPlayer.addEventListener("ended",()=>{if(currentMediaType==="local"&&loopActive)handleLoopBoundary()});
 
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstallPrompt=e;$("#installBtn").classList.remove("hidden")});
 $("#installBtn").onclick=async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$("#installBtn").classList.add("hidden")};
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=2");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=3");
 renderPresets();renderRecent();renderOfflineMedia();updateRangeStatus();
