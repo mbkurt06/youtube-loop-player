@@ -11,26 +11,29 @@ let loopActive=false;
 let loopIteration=0;
 let waiting=false;
 let deferredInstallPrompt=null;
+let activeScreen="edit";
 
 const localPlayer=$("#localPlayer");
+const playerShell=$("#sharedPlayerShell");
 
 const store={
   get(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback}catch{return fallback}},
   set(key,value){localStorage.setItem(key,JSON.stringify(value))}
 };
+
 const savedVideosInitial=store.get("ylp_saved_videos",[]);
 const legacyRecent=store.get("ylp_recent",[]);
 const state={
   presets:store.get("ylp_presets",[]),
-  recent:legacyRecent,
-  videos:savedVideosInitial.length?savedVideosInitial:legacyRecent.map(r=>({
+  history:store.get("ylp_history",legacyRecent.map(r=>({
     videoId:r.videoId,
     url:"https://www.youtube.com/watch?v="+r.videoId,
     title:"YouTube video · "+r.videoId,
-    updatedAt:r.updatedAt||Date.now()
-  }))
+    playedAt:r.updatedAt||Date.now()
+  }))),
+  videos:savedVideosInitial,
+  dark:store.get("ylp_dark",false)
 };
-if(!savedVideosInitial.length&&state.videos.length)store.set("ylp_saved_videos",state.videos);
 
 function parseVideoId(input){
   const raw=String(input||"").trim();
@@ -45,6 +48,7 @@ function parseVideoId(input){
   }catch{}
   return "";
 }
+
 function parseTime(value){
   const v=String(value||"").trim().replace(",",".");
   if(!v)return 0;
@@ -55,6 +59,7 @@ function parseTime(value){
   if(p.length===3)return Math.max(0,p[0]*3600+p[1]*60+p[2]);
   return NaN;
 }
+
 function formatTime(sec){
   sec=Math.max(0,Number(sec)||0);
   const rounded=Math.round(sec*10)/10;
@@ -63,35 +68,66 @@ function formatTime(sec){
   const secText=String(s).padStart(2,"0")+(fraction?"."+fraction:"");
   return h?String(h)+":"+String(m).padStart(2,"0")+":"+secText:String(m)+":"+secText;
 }
+
 function formatBytes(bytes){
   const n=Number(bytes)||0;
   if(n<1024)return n+" B";
   if(n<1024*1024)return(n/1024).toFixed(1)+" KB";
   return(n/(1024*1024)).toFixed(1)+" MB";
 }
-function currentRange(){return{a:parseTime($("#startTime").value),b:parseTime($("#endTime").value)}}
+
+function currentRange(){
+  return{a:parseTime($("#startTime").value),b:parseTime($("#endTime").value)};
+}
+
 function updateRangeStatus(){
   const r=currentRange(),total=Math.max(1,Number($("#repeatCount").value)||1);
   $("#rangeStatus").textContent=Number.isFinite(r.a)&&Number.isFinite(r.b)?formatTime(r.a)+" – "+formatTime(r.b):"Geçersiz";
   $("#repeatStatus").textContent=String(loopIteration)+" / "+String(total);
+  $("#playRepeatStatus").textContent=String(loopIteration)+" / "+String(loopActive||mediaLoaded()?total:0);
 }
-function showError(msg){$("#loadError").textContent=msg||"";$("#loadError").classList.toggle("hidden",!msg)}
-function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 
-function mediaLoaded(){return currentMediaType==="youtube"?!!currentVideoId:currentMediaType==="local"?!!currentOfflineId:false}
-function mediaTime(){return currentMediaType==="local"?(localPlayer.currentTime||0):(playerReady&&player?(player.getCurrentTime()||0):0)}
+function showError(msg){
+  $("#loadError").textContent=msg||"";
+  $("#loadError").classList.toggle("hidden",!msg);
+}
+
+function escapeHtml(v){
+  return String(v).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function mediaLoaded(){
+  return currentMediaType==="youtube"?!!currentVideoId:currentMediaType==="local"?!!currentOfflineId:false;
+}
+function mediaTime(){
+  return currentMediaType==="local"?(localPlayer.currentTime||0):(playerReady&&player?(player.getCurrentTime()||0):0);
+}
 function mediaSeek(t){
   t=Math.max(0,Number(t)||0);
   if(currentMediaType==="local")localPlayer.currentTime=t;
   else if(playerReady&&player)player.seekTo(t,true);
 }
 function mediaPlay(){
-  if(currentMediaType==="local"){localPlayer.play().catch(()=>{})}
+  if(currentMediaType==="local")localPlayer.play().catch(()=>{});
   else if(playerReady&&player)player.playVideo();
 }
 function mediaPause(){
-  if(currentMediaType==="local")localPlayer.pause();
-  else if(playerReady&&player)player.pauseVideo();
+  if(currentMediaType==="local"){
+    localPlayer.pause();
+  }else if(playerReady&&player){
+    try{player.pauseVideo()}catch{}
+  }
+}
+function forcePauseMedia(){
+  mediaPause();
+  if(currentMediaType==="youtube"&&playerReady&&player){
+    try{player.pauseVideo()}catch{}
+    setTimeout(()=>{try{player.pauseVideo()}catch{}},80);
+    setTimeout(()=>{try{player.pauseVideo()}catch{}},250);
+  }else if(currentMediaType==="local"){
+    localPlayer.pause();
+    setTimeout(()=>localPlayer.pause(),80);
+  }
 }
 function mediaSetRate(rate){
   rate=Number(rate)||1;
@@ -100,6 +136,36 @@ function mediaSetRate(rate){
 }
 function releaseObjectUrl(){
   if(currentObjectUrl){URL.revokeObjectURL(currentObjectUrl);currentObjectUrl=""}
+}
+
+function applyTheme(){
+  document.documentElement.classList.toggle("dark",state.dark);
+  $("#themeBtn").textContent=state.dark?"☀️":"🌙";
+  $("#themeBtn").title=state.dark?"Gündüz modu":"Gece modu";
+}
+function toggleTheme(){
+  state.dark=!state.dark;
+  store.set("ylp_dark",state.dark);
+  applyTheme();
+}
+
+function movePlayerTo(screen){
+  const host=$(screen==="play"?"#playPlayerHost":"#editPlayerHost");
+  if(host&&playerShell.parentElement!==host)host.appendChild(playerShell);
+}
+
+function switchScreen(screen){
+  activeScreen=screen;
+  $("#editScreen").classList.toggle("active",screen==="edit");
+  $("#playScreen").classList.toggle("active",screen==="play");
+  $("#editTabBtn").classList.toggle("active",screen==="edit");
+  $("#playTabBtn").classList.toggle("active",screen==="play");
+  movePlayerTo(screen);
+  if(screen==="play"){
+    renderPlaySelectors();
+    syncPlayControls();
+  }
+  window.scrollTo({top:0,behavior:"smooth"});
 }
 
 window.onYouTubeIframeAPIReady=()=>{
@@ -119,54 +185,89 @@ window.onYouTubeIframeAPIReady=()=>{
   });
 };
 
-function addRecent(videoId){
-  state.recent=[{videoId,updatedAt:Date.now()},...state.recent.filter(x=>x.videoId!==videoId)].slice(0,10);
-  store.set("ylp_recent",state.recent);
+function addHistory(videoId){
+  const saved=state.videos.find(v=>v.videoId===videoId);
+  const old=state.history.find(v=>v.videoId===videoId);
+  const item={
+    videoId,
+    url:"https://www.youtube.com/watch?v="+videoId,
+    title:saved?.title||old?.title||("YouTube video · "+videoId),
+    playedAt:Date.now()
+  };
+  state.history=[item,...state.history.filter(v=>v.videoId!==videoId)].slice(0,50);
+  store.set("ylp_history",state.history);
+  renderHistory();
 }
+
 function saveYoutubeVideo(videoId){
+  if(!videoId)return;
+  const history=state.history.find(v=>v.videoId===videoId);
   const existing=state.videos.find(v=>v.videoId===videoId);
   const item=existing||{
     videoId,
     url:"https://www.youtube.com/watch?v="+videoId,
-    title:"YouTube video · "+videoId,
+    title:history?.title||("YouTube video · "+videoId),
     createdAt:Date.now()
   };
   item.updatedAt=Date.now();
   state.videos=[item,...state.videos.filter(v=>v.videoId!==videoId)];
   store.set("ylp_saved_videos",state.videos);
   renderSavedVideos();
+  renderPlaySelectors();
 }
+
 function syncCurrentVideoTitle(){
   if(currentMediaType!=="youtube"||!currentVideoId||!playerReady||!player)return;
   try{
     const data=player.getVideoData?.();
     const title=String(data?.title||"").trim();
     if(!title)return;
-    const item=state.videos.find(v=>v.videoId===currentVideoId);
-    if(item&&item.title!==title){
-      item.title=title;
-      store.set("ylp_saved_videos",state.videos);
-      renderSavedVideos();
-    }
+    const saved=state.videos.find(v=>v.videoId===currentVideoId);
+    if(saved){saved.title=title;store.set("ylp_saved_videos",state.videos)}
+    const hist=state.history.find(v=>v.videoId===currentVideoId);
+    if(hist){hist.title=title;store.set("ylp_history",state.history)}
+    renderSavedVideos();
+    renderHistory();
+    renderPlaySelectors();
   }catch{}
 }
+
 function deleteSavedVideo(videoId){
   state.videos=state.videos.filter(v=>v.videoId!==videoId);
   store.set("ylp_saved_videos",state.videos);
   renderSavedVideos();
+  renderPlaySelectors();
 }
+
 function renderSavedVideos(){
   const list=$("#savedVideoList");
-  if(!list)return;
   $("#savedVideoEmpty").classList.toggle("hidden",state.videos.length>0);
   list.innerHTML=state.videos.map(v=>{
     const selected=currentMediaType==="youtube"&&currentVideoId===v.videoId;
-    const count=state.presets.filter(p=>(p.sourceType||"youtube")==="youtube"&&(p.sourceId||p.videoId)===v.videoId).length;
+    const count=presetsForVideo(v.videoId).length;
     return '<article class="saved-video-card'+(selected?' selected':'')+'"><div class="saved-video-main"><div><div class="saved-video-title">'+escapeHtml(v.title||("YouTube video · "+v.videoId))+'</div><div class="saved-video-meta">'+count+' kayıtlı bölüm · '+escapeHtml(v.videoId)+'</div></div>'+(selected?'<span class="selected-badge">Seçili</span>':'')+'</div><div class="saved-video-actions"><button data-video-open="'+v.videoId+'">Aç</button><button data-video-delete="'+v.videoId+'">Listeden sil</button></div></article>';
   }).join("");
   list.querySelectorAll("[data-video-open]").forEach(b=>b.onclick=()=>loadVideo(b.dataset.videoOpen,false));
   list.querySelectorAll("[data-video-delete]").forEach(b=>b.onclick=()=>deleteSavedVideo(b.dataset.videoDelete));
 }
+
+function renderHistory(){
+  const list=$("#historyList");
+  $("#historyEmpty").classList.toggle("hidden",state.history.length>0);
+  list.innerHTML=state.history.map(v=>{
+    const saved=state.videos.some(s=>s.videoId===v.videoId);
+    return '<article class="recent-item"><div class="recent-main"><div><div class="recent-title">'+escapeHtml(v.title||("YouTube video · "+v.videoId))+'</div><div class="recent-meta">'+escapeHtml(v.videoId)+(saved?' · kayıtlı':'')+'</div></div></div><div class="recent-actions"><button data-history-open="'+v.videoId+'">Aç</button>'+(!saved?'<button data-history-save="'+v.videoId+'">Listeye ekle</button>':'')+'</div></article>';
+  }).join("");
+  list.querySelectorAll("[data-history-open]").forEach(b=>b.onclick=()=>loadVideo(b.dataset.historyOpen,false));
+  list.querySelectorAll("[data-history-save]").forEach(b=>b.onclick=()=>saveYoutubeVideo(b.dataset.historySave));
+}
+
+function clearHistory(){
+  state.history=[];
+  store.set("ylp_history",state.history);
+  renderHistory();
+}
+
 function loadVideo(input,autoplay=false){
   const id=parseVideoId(input);
   if(!id){showError("Geçerli bir YouTube bağlantısı veya video kimliği gir.");return}
@@ -177,17 +278,22 @@ function loadVideo(input,autoplay=false){
   localPlayer.pause();localPlayer.removeAttribute("src");localPlayer.load();localPlayer.classList.add("hidden");
   $("#player").classList.remove("hidden");$("#emptyPlayer").classList.add("hidden");showError("");
   if(autoplay)player.loadVideoById(id);else player.cueVideoById(id);
-  addRecent(id);
-  saveYoutubeVideo(id);
+  addHistory(id);
+  renderSavedVideos();
   renderPresets();
+  renderPlaySelectors();
+  syncPlayControls();
   setTimeout(syncCurrentVideoTitle,600);
   setTimeout(syncCurrentVideoTitle,1500);
 }
+
 function setPoint(which){
   if(!mediaLoaded())return;
   const t=Math.max(0,mediaTime());
-  $(which==="a"?"#startTime":"#endTime").value=formatTime(t);updateRangeStatus();
+  $(which==="a"?"#startTime":"#endTime").value=formatTime(t);
+  updateRangeStatus();
 }
+
 function nudge(which,delta){
   const el=$(which==="a"?"#startTime":"#endTime");
   const n=parseTime(el.value);
@@ -197,6 +303,7 @@ function nudge(which,delta){
   el.value=formatTime(nextTenths/10);
   updateRangeStatus();
 }
+
 function validateLoop(){
   if(!mediaLoaded())return"Önce bir video veya ses aç.";
   const r=currentRange();
@@ -204,41 +311,71 @@ function validateLoop(){
   if(r.b<=r.a)return"Bitiş zamanı başlangıçtan büyük olmalı.";
   return"";
 }
-function startLoop(){
-  const err=validateLoop();if(err){showError(err);return}
-  showError("");const r=currentRange();
-  loopIteration=0;loopActive=true;waiting=false;
-  $("#startLoopBtn").disabled=true;$("#stopLoopBtn").disabled=false;$("#loopState").textContent="Tekrar ediyor";
-  mediaSetRate($("#playbackRate").value);mediaSeek(r.a);mediaPlay();
-  clearInterval(loopTimer);loopTimer=setInterval(loopTick,80);updateRangeStatus();
+
+function setLoopButtons(running){
+  $("#startLoopBtn").disabled=running;
+  $("#stopLoopBtn").disabled=!running;
+  $("#playPresetBtn").disabled=running||!$("#playPresetSelect").value;
+  $("#playStopBtn").disabled=!running;
 }
+
+function startLoop(){
+  const err=validateLoop();
+  if(err){showError(err);return}
+  showError("");
+  const r=currentRange();
+  loopIteration=0;loopActive=true;waiting=false;
+  setLoopButtons(true);
+  $("#loopState").textContent="Tekrar ediyor";
+  $("#playLoopState").textContent="Tekrar ediyor";
+  mediaSetRate($("#playbackRate").value);
+  mediaSeek(r.a);
+  mediaPlay();
+  clearInterval(loopTimer);
+  loopTimer=setInterval(loopTick,60);
+  updateRangeStatus();
+}
+
 function loopTick(){
   if(!loopActive||waiting||!mediaLoaded())return;
   const r=currentRange(),t=mediaTime();
-  if(t>=r.b-0.04)handleLoopBoundary();
+  if(t>=r.b-0.03)handleLoopBoundary();
 }
+
 function handleLoopBoundary(){
   if(!loopActive||waiting)return;
   const target=Math.max(1,Number($("#repeatCount").value)||1);
-  loopIteration++;updateRangeStatus();
+  loopIteration++;
+  updateRangeStatus();
   if(loopIteration>=target){
-    loopActive=false;clearInterval(loopTimer);loopTimer=null;mediaPause();
-    $("#startLoopBtn").disabled=false;$("#stopLoopBtn").disabled=true;$("#loopState").textContent="Tamamlandı ✓";
+    loopActive=false;
+    clearInterval(loopTimer);loopTimer=null;
+    forcePauseMedia();
+    setLoopButtons(false);
+    $("#loopState").textContent="Tamamlandı ✓";
+    $("#playLoopState").textContent="Tamamlandı ✓";
     if("vibrate"in navigator){try{navigator.vibrate([100,60,160])}catch{}}
     return;
   }
   const r=currentRange(),pause=Math.max(0,Number($("#pauseBetween").value)||0)*1000;
-  waiting=true;mediaPause();
+  waiting=true;
+  forcePauseMedia();
   setTimeout(()=>{
     if(!loopActive)return;
     mediaSeek(r.a);mediaSetRate($("#playbackRate").value);mediaPlay();waiting=false;
   },pause);
 }
+
 function stopLoop(updateLabel=true){
-  loopActive=false;waiting=false;clearInterval(loopTimer);loopTimer=null;
-  mediaPause();
-  $("#startLoopBtn").disabled=false;$("#stopLoopBtn").disabled=true;
-  if(updateLabel)$("#loopState").textContent="Durduruldu";
+  loopActive=false;
+  waiting=false;
+  clearInterval(loopTimer);loopTimer=null;
+  forcePauseMedia();
+  setLoopButtons(false);
+  if(updateLabel){
+    $("#loopState").textContent="Durduruldu";
+    $("#playLoopState").textContent="Durduruldu";
+  }
   updateRangeStatus();
 }
 
@@ -250,6 +387,7 @@ function openSaveDialog(){
   $("#presetSummary").textContent=formatTime(r.a)+" – "+formatTime(r.b)+" · "+$("#repeatCount").value+" tekrar · "+$("#playbackRate").value+"×";
   $("#saveDialog").showModal();
 }
+
 function savePreset(){
   const r=currentRange(),title=$("#presetTitle").value.trim()||("Bölüm "+String(state.presets.length+1));
   state.presets.unshift({
@@ -264,44 +402,104 @@ function savePreset(){
     pause:Number($("#pauseBetween").value)||0,
     createdAt:Date.now()
   });
-  store.set("ylp_presets",state.presets);renderPresets();renderSavedVideos();
+  store.set("ylp_presets",state.presets);
+  if(currentMediaType==="youtube"&&currentVideoId)saveYoutubeVideo(currentVideoId);
+  renderPresets();renderSavedVideos();renderPlaySelectors();
 }
-async function usePreset(p){
-  $("#startTime").value=formatTime(p.a);$("#endTime").value=formatTime(p.b);
-  $("#repeatCount").value=p.repeats;$("#playbackRate").value=String(p.rate);$("#pauseBetween").value=String(p.pause||0);
+
+async function usePreset(p,{play=false}={}){
+  $("#startTime").value=formatTime(p.a);
+  $("#endTime").value=formatTime(p.b);
+  $("#repeatCount").value=p.repeats;
+  $("#playbackRate").value=String(p.rate);
+  $("#pauseBetween").value=String(p.pause||0);
   updateRangeStatus();
+
   const type=p.sourceType||(p.videoId?"youtube":"");
-  if(type==="local")await loadOfflineMedia(p.sourceId);
-  else loadVideo(p.sourceId||p.videoId,false);
+  if(type==="local"){
+    if(currentOfflineId!==p.sourceId)await loadOfflineMedia(p.sourceId);
+  }else{
+    const id=p.sourceId||p.videoId;
+    if(currentVideoId!==id)loadVideo(id,false);
+  }
+
+  if(play){
+    const go=()=>{mediaSeek(p.a);startLoop()};
+    if(type==="youtube"&&currentVideoId!==(p.sourceId||p.videoId))setTimeout(go,650);
+    else setTimeout(go,80);
+  }
 }
-function deletePreset(id){state.presets=state.presets.filter(p=>p.id!==id);store.set("ylp_presets",state.presets);renderPresets();renderSavedVideos()}
+
+function deletePreset(id){
+  state.presets=state.presets.filter(p=>p.id!==id);
+  store.set("ylp_presets",state.presets);
+  renderPresets();renderSavedVideos();renderPlaySelectors();
+}
+
+function presetsForVideo(videoId){
+  return state.presets.filter(p=>{
+    const type=p.sourceType||(p.videoId?"youtube":"");
+    return type==="youtube"&&(p.sourceId||p.videoId)===videoId;
+  });
+}
+
 function renderPresets(){
   const list=$("#presetList");
   let visible=[];
-  if(currentMediaType==="youtube"&&currentVideoId){
-    visible=state.presets.filter(p=>{
-      const type=p.sourceType||(p.videoId?"youtube":"");
-      return type==="youtube"&&(p.sourceId||p.videoId)===currentVideoId;
-    });
-  }else if(currentMediaType==="local"&&currentOfflineId){
-    visible=state.presets.filter(p=>p.sourceType==="local"&&p.sourceId===currentOfflineId);
-  }
+  if(currentMediaType==="youtube"&&currentVideoId)visible=presetsForVideo(currentVideoId);
+  else if(currentMediaType==="local"&&currentOfflineId)visible=state.presets.filter(p=>p.sourceType==="local"&&p.sourceId===currentOfflineId);
+
   $("#presetEmpty").classList.toggle("hidden",visible.length>0);
-  $("#presetEmpty").textContent=mediaLoaded()?"Bu video için henüz kayıtlı bölüm yok.":"Önce kayıtlı bir video seç veya yeni bir YouTube bağlantısı aç.";
-  list.innerHTML=visible.map(p=>{
-    const type=p.sourceType||(p.videoId?"youtube":"");
-    return '<article class="preset-card"><div class="preset-main"><div><div class="preset-title">'+escapeHtml(p.title)+'</div><div class="preset-meta">'+formatTime(p.a)+' – '+formatTime(p.b)+' · '+p.repeats+' tekrar · '+p.rate+'×</div></div></div><div class="preset-actions"><button data-use="'+p.id+'">Aç</button><button data-delete="'+p.id+'">Sil</button></div></article>'
-  }).join("");
+  $("#presetEmpty").textContent=mediaLoaded()?"Bu video için henüz kayıtlı bölüm yok.":"Önce bir video aç.";
+  list.innerHTML=visible.map(p=>'<article class="preset-card"><div class="preset-main"><div><div class="preset-title">'+escapeHtml(p.title)+'</div><div class="preset-meta">'+formatTime(p.a)+' – '+formatTime(p.b)+' · '+p.repeats+' tekrar · '+p.rate+'×</div></div></div><div class="preset-actions"><button data-use="'+p.id+'">Aç</button><button data-play="'+p.id+'">Oynat</button><button data-delete="'+p.id+'">Sil</button></div></article>').join("");
   list.querySelectorAll("[data-use]").forEach(b=>b.onclick=()=>usePreset(state.presets.find(p=>p.id===b.dataset.use)));
+  list.querySelectorAll("[data-play]").forEach(b=>b.onclick=()=>usePreset(state.presets.find(p=>p.id===b.dataset.play),{play:true}));
   list.querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>deletePreset(b.dataset.delete));
 }
-function renderRecent(){
-  const list=$("#recentList");$("#recentEmpty").classList.toggle("hidden",state.recent.length>0);
-  list.innerHTML=state.recent.map(r=>'<article class="recent-item"><div class="recent-main"><div><div class="recent-title">YouTube video</div><div class="recent-meta">'+escapeHtml(r.videoId)+'</div></div></div><div class="recent-actions"><button data-recent="'+r.videoId+'">Aç</button></div></article>').join("");
-  list.querySelectorAll("[data-recent]").forEach(b=>b.onclick=()=>loadVideo(b.dataset.recent,false));
+
+function renderPlaySelectors(){
+  const videoSel=$("#playVideoSelect");
+  const wanted=videoSel.value||((currentMediaType==="youtube"&&state.videos.some(v=>v.videoId===currentVideoId))?currentVideoId:"");
+  videoSel.innerHTML='<option value="">Video seç…</option>'+state.videos.map(v=>'<option value="'+escapeHtml(v.videoId)+'">'+escapeHtml(v.title||v.videoId)+'</option>').join("");
+  if(state.videos.some(v=>v.videoId===wanted))videoSel.value=wanted;
+  renderPlayPresets();
 }
 
-/* Offline media: files are stored as blobs in IndexedDB. */
+function renderPlayPresets(){
+  const videoId=$("#playVideoSelect").value;
+  const presetSel=$("#playPresetSelect");
+  const list=videoId?presetsForVideo(videoId):[];
+  presetSel.disabled=!videoId||!list.length;
+  presetSel.innerHTML=!videoId?'<option value="">Önce video seç…</option>':(!list.length?'<option value="">Bu videoda kayıtlı bölüm yok</option>':'<option value="">Bölüm seç…</option>'+list.map(p=>'<option value="'+escapeHtml(p.id)+'">'+escapeHtml(p.title)+' · '+formatTime(p.a)+'–'+formatTime(p.b)+'</option>').join(""));
+  $("#playPresetBtn").disabled=true;
+  $("#playSelectedInfo").textContent=!videoId?"Bir video ve tekrar bölümü seç.":(!list.length?"Bu video için henüz kayıtlı tekrar bölümü yok.":"Tekrar bölümünü seç.");
+}
+
+function syncPlayControls(){
+  const id=$("#playPresetSelect").value;
+  const p=state.presets.find(x=>x.id===id);
+  if(!p){
+    $("#playPresetBtn").disabled=true;
+    return;
+  }
+  $("#playPresetBtn").disabled=loopActive;
+  $("#playSelectedInfo").textContent=p.title+" · "+formatTime(p.a)+" – "+formatTime(p.b)+" · "+p.repeats+" tekrar";
+}
+
+function selectPlayVideo(videoId){
+  if(!videoId){renderPlayPresets();return}
+  loadVideo(videoId,false);
+  renderPlayPresets();
+}
+
+function selectPlayPreset(id){
+  const p=state.presets.find(x=>x.id===id);
+  if(!p){syncPlayControls();return}
+  usePreset(p,{play:false});
+  syncPlayControls();
+}
+
+/* Offline media */
 const DB_NAME="youtube-loop-player-db",DB_VERSION=1,MEDIA_STORE="media";
 function openMediaDb(){
   return new Promise((resolve,reject)=>{
@@ -344,7 +542,6 @@ async function importOfflineFile(file){
   await dbPutMedia({id,name:file.name,type:file.type||"application/octet-stream",size:file.size,blob:file,createdAt:Date.now()});
   await renderOfflineMedia();await loadOfflineMedia(id);
 }
-
 function fileNameFromUrl(url){
   try{
     const u=new URL(url);
@@ -361,27 +558,19 @@ function isYouTubeUrl(url){
 async function importRemoteMedia(url){
   const raw=String(url||"").trim();
   if(!raw)throw new Error("Bir medya bağlantısı gir.");
-  if(isYouTubeUrl(raw))throw new Error("YouTube bağlantısından doğrudan dosya indirme desteklenmiyor. YouTube dışındaki doğrudan MP4/MP3/M4A bağlantısını kullan.");
+  if(isYouTubeUrl(raw))throw new Error("YouTube dışındaki doğrudan MP4/MP3/M4A bağlantısını kullan.");
   const status=$("#downloadStatus");
   status.textContent="İndiriliyor…";
   const res=await fetch(raw,{mode:"cors"});
   if(!res.ok)throw new Error("İndirme başarısız: HTTP "+res.status);
   const blob=await res.blob();
   const type=(blob.type||res.headers.get("content-type")||"").toLowerCase();
-  if(type && !type.startsWith("video/") && !type.startsWith("audio/") && !type.includes("octet-stream")){
-    throw new Error("Bu bağlantı doğrudan bir video veya ses dosyasına benzemiyor.");
-  }
+  if(type&&!type.startsWith("video/")&&!type.startsWith("audio/")&&!type.includes("octet-stream"))throw new Error("Bu bağlantı doğrudan bir video veya ses dosyasına benzemiyor.");
   const id=crypto.randomUUID?crypto.randomUUID():String(Date.now());
   let name=fileNameFromUrl(raw);
-  if(!/\.[a-z0-9]{2,5}$/i.test(name)){
-    if(type.includes("mp4"))name+=".mp4";
-    else if(type.includes("mpeg"))name+=".mp3";
-    else if(type.includes("m4a"))name+=".m4a";
-  }
   await dbPutMedia({id,name,type:type||"application/octet-stream",size:blob.size,blob,sourceUrl:raw,createdAt:Date.now()});
   status.textContent="Kaydedildi: "+name+" · "+formatBytes(blob.size);
-  await renderOfflineMedia();
-  await loadOfflineMedia(id);
+  await renderOfflineMedia();await loadOfflineMedia(id);
 }
 
 async function checkServerStatus(){
@@ -391,67 +580,37 @@ async function checkServerStatus(){
     if(!res.ok)throw new Error();
     const data=await res.json();
     const runtimes=(data.jsRuntimes||[]).join(", ");
-    if(!data.ytDlpInstalled){
-      el.textContent="YouTube indirme motoru kurulu değil.";
-      return;
-    }
-    if(!runtimes){
-      el.textContent="YouTube indirme için Deno veya Node gerekli.";
-      return;
-    }
+    if(!data.ytDlpInstalled){el.textContent="YouTube indirme motoru kurulu değil.";return}
+    if(!runtimes){el.textContent="YouTube indirme için Deno veya Node gerekli.";return}
     el.textContent="İndirme sunucusu hazır · JS: "+runtimes+(data.ffmpeg?" · ffmpeg var":"");
   }catch{
-    el.textContent="İndirme sunucusuna ulaşılamıyor. Uygulamayı server.py ile başlat.";
+    el.textContent="İndirme sunucusuna ulaşılamıyor. İndirme için server.py ile başlat.";
   }
 }
-
 function filenameFromDisposition(value){
   const raw=String(value||"");
-  const utf=raw.match(/filename\*=UTF-8''([^;]+)/i);
-  if(utf){try{return decodeURIComponent(utf[1])}catch{}}
   const plain=raw.match(/filename="?([^";]+)"?/i);
   return plain?plain[1]:"youtube-video.mp4";
 }
 async function downloadYouTubeForOffline(){
-  const url=$("#videoUrl").value.trim();
-  const status=$("#youtubeDownloadStatus");
+  const url=$("#videoUrl").value.trim(),status=$("#youtubeDownloadStatus");
   if(!parseVideoId(url)){showError("Önce geçerli bir YouTube bağlantısı gir.");return}
   if(!$("#downloadConsent").checked){showError("Bu videoyu çevrimdışı kaydetme hakkın olduğunu onayla.");return}
-
   const btn=$("#youtubeDownloadBtn");
   btn.disabled=true;showError("");status.textContent="YouTube videosu indiriliyor…";
   try{
-    const res=await fetch("./api/youtube-download",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({url,authorized:true,cookieBrowser:$("#cookieBrowser").value})
-    });
-    if(!res.ok){
-      let message="YouTube indirmesi başarısız.";
-      try{const data=await res.json();if(data.error)message=data.error}catch{}
-      throw new Error(message);
-    }
-    const blob=await res.blob();
-    const name=filenameFromDisposition(res.headers.get("content-disposition"));
+    const res=await fetch("./api/youtube-download",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url,authorized:true,cookieBrowser:$("#cookieBrowser").value})});
+    if(!res.ok){let message="YouTube indirmesi başarısız.";try{const data=await res.json();if(data.error)message=data.error}catch{}throw new Error(message)}
+    const blob=await res.blob(),name=filenameFromDisposition(res.headers.get("content-disposition"));
     const id=crypto.randomUUID?crypto.randomUUID():String(Date.now());
-    await dbPutMedia({
-      id,name,type:blob.type||"video/mp4",size:blob.size,blob,
-      sourceUrl:url,sourceType:"youtube-download",createdAt:Date.now()
-    });
+    await dbPutMedia({id,name,type:blob.type||"video/mp4",size:blob.size,blob,sourceUrl:url,sourceType:"youtube-download",createdAt:Date.now()});
     status.textContent="Kaydedildi: "+name+" · "+formatBytes(blob.size);
-    await renderOfflineMedia();
-    await loadOfflineMedia(id);
+    await renderOfflineMedia();await loadOfflineMedia(id);
   }catch(err){
     status.textContent="";
-    const msg=err?.message||"YouTube videosu indirilemedi.";
-    if(msg.includes("Failed to fetch")){
-      showError("YouTube indirme sunucusuna ulaşılamadı. Uygulamayı ‘python3 server.py 8081’ ile başlat.");
-    }else showError(msg);
-  }finally{
-    btn.disabled=false;
-  }
+    showError(err?.message||"YouTube videosu indirilemedi.");
+  }finally{btn.disabled=false}
 }
-
 async function loadOfflineMedia(id){
   const item=await dbGetMedia(id);
   if(!item){showError("Çevrimdışı medya bulunamadı.");return}
@@ -480,17 +639,36 @@ async function renderOfflineMedia(){
   list.querySelectorAll("[data-offline-delete]").forEach(b=>b.onclick=()=>deleteOfflineMedia(b.dataset.offlineDelete));
 }
 
+/* Events */
 $("#loadBtn").onclick=()=>loadVideo($("#videoUrl").value,false);
-$("#youtubeDownloadBtn").onclick=downloadYouTubeForOffline;
+$("#saveCurrentVideoBtn").onclick=()=>{if(currentVideoId)saveYoutubeVideo(currentVideoId);else showError("Önce bir YouTube videosu aç.")};
+$("#clearHistoryBtn").onclick=clearHistory;
 $("#videoUrl").addEventListener("keydown",e=>{if(e.key==="Enter")loadVideo(e.currentTarget.value,false)});
-$("#setStartBtn").onclick=()=>setPoint("a");$("#setEndBtn").onclick=()=>setPoint("b");
+$("#setStartBtn").onclick=()=>setPoint("a");
+$("#setEndBtn").onclick=()=>setPoint("b");
 document.querySelectorAll("[data-nudge-start]").forEach(b=>b.onclick=()=>nudge("a",Number(b.dataset.nudgeStart)));
 document.querySelectorAll("[data-nudge-end]").forEach(b=>b.onclick=()=>nudge("b",Number(b.dataset.nudgeEnd)));
-$("#startLoopBtn").onclick=startLoop;$("#stopLoopBtn").onclick=()=>stopLoop(true);
-$("#savePresetBtn").onclick=openSaveDialog;$("#confirmSavePreset").addEventListener("click",savePreset);
+$("#startLoopBtn").onclick=startLoop;
+$("#stopLoopBtn").onclick=e=>{e.preventDefault();e.stopPropagation();stopLoop(true)};
+$("#savePresetBtn").onclick=openSaveDialog;
+$("#confirmSavePreset").addEventListener("click",savePreset);
 ["#startTime","#endTime","#repeatCount"].forEach(s=>$(s).addEventListener("input",updateRangeStatus));
 $("#playbackRate").addEventListener("change",()=>mediaSetRate($("#playbackRate").value));
-$("#offlineFileInput").addEventListener("change",async e=>{const f=e.target.files?.[0];if(f){try{await importOfflineFile(f)}catch(err){showError("Dosya kaydedilemedi: "+(err?.message||"bilinmeyen hata"))}e.target.value=""}});
+
+$("#editTabBtn").onclick=()=>switchScreen("edit");
+$("#playTabBtn").onclick=()=>switchScreen("play");
+$("#themeBtn").onclick=toggleTheme;
+
+$("#playVideoSelect").addEventListener("change",e=>selectPlayVideo(e.target.value));
+$("#playPresetSelect").addEventListener("change",e=>selectPlayPreset(e.target.value));
+$("#playPresetBtn").onclick=()=>{
+  const p=state.presets.find(x=>x.id===$("#playPresetSelect").value);
+  if(p)usePreset(p,{play:true});
+};
+$("#playStopBtn").onclick=e=>{e.preventDefault();e.stopPropagation();stopLoop(true)};
+
+$("#youtubeDownloadBtn").onclick=downloadYouTubeForOffline;
+$("#offlineFileInput").addEventListener("change",async e=>{const file=e.target.files?.[0];if(file){try{await importOfflineFile(file)}catch(err){showError("Dosya kaydedilemedi: "+(err?.message||"bilinmeyen hata"))}e.target.value=""}});
 $("#downloadMediaBtn").addEventListener("click",async()=>{
   const btn=$("#downloadMediaBtn"),status=$("#downloadStatus");
   btn.disabled=true;showError("");
@@ -502,7 +680,15 @@ localPlayer.addEventListener("ended",()=>{if(currentMediaType==="local"&&loopAct
 
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstallPrompt=e;$("#installBtn").classList.remove("hidden")});
 $("#installBtn").onclick=async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$("#installBtn").classList.add("hidden")};
-
 $("#secondaryTools")?.addEventListener("toggle",e=>{if(e.currentTarget.open)checkServerStatus()});
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=8");
-renderSavedVideos();renderPresets();renderOfflineMedia();updateRangeStatus();
+
+applyTheme();
+movePlayerTo("edit");
+renderSavedVideos();
+renderHistory();
+renderPresets();
+renderPlaySelectors();
+renderOfflineMedia();
+updateRangeStatus();
+
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=9");
