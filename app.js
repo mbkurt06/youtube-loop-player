@@ -189,9 +189,13 @@ function setPoint(which){
   $(which==="a"?"#startTime":"#endTime").value=formatTime(t);updateRangeStatus();
 }
 function nudge(which,delta){
-  const el=$(which==="a"?"#startTime":"#endTime"),n=parseTime(el.value);
-  const next=Math.round(Math.max(0,(Number.isFinite(n)?n:0)+delta)*10)/10;
-  el.value=formatTime(next);updateRangeStatus();
+  const el=$(which==="a"?"#startTime":"#endTime");
+  const n=parseTime(el.value);
+  const baseTenths=Math.round((Number.isFinite(n)?n:0)*10);
+  const deltaTenths=Math.round(Number(delta)*10);
+  const nextTenths=Math.max(0,baseTenths+deltaTenths);
+  el.value=formatTime(nextTenths/10);
+  updateRangeStatus();
 }
 function validateLoop(){
   if(!mediaLoaded())return"Önce bir video veya ses aç.";
@@ -232,6 +236,7 @@ function handleLoopBoundary(){
 }
 function stopLoop(updateLabel=true){
   loopActive=false;waiting=false;clearInterval(loopTimer);loopTimer=null;
+  mediaPause();
   $("#startLoopBtn").disabled=false;$("#stopLoopBtn").disabled=true;
   if(updateLabel)$("#loopState").textContent="Durduruldu";
   updateRangeStatus();
@@ -499,5 +504,5 @@ window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredIns
 $("#installBtn").onclick=async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$("#installBtn").classList.add("hidden")};
 
 $("#secondaryTools")?.addEventListener("toggle",e=>{if(e.currentTarget.open)checkServerStatus()});
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=7");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=8");
 renderSavedVideos();renderPresets();renderOfflineMedia();updateRangeStatus();
