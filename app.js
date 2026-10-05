@@ -302,6 +302,27 @@ async function importRemoteMedia(url){
   await loadOfflineMedia(id);
 }
 
+async function checkServerStatus(){
+  const el=$("#serverStatus");
+  try{
+    const res=await fetch("./api/status",{cache:"no-store"});
+    if(!res.ok)throw new Error();
+    const data=await res.json();
+    const runtimes=(data.jsRuntimes||[]).join(", ");
+    if(!data.ytDlpInstalled){
+      el.textContent="YouTube indirme motoru kurulu değil.";
+      return;
+    }
+    if(!runtimes){
+      el.textContent="YouTube indirme için Deno veya Node gerekli.";
+      return;
+    }
+    el.textContent="İndirme sunucusu hazır · JS: "+runtimes+(data.ffmpeg?" · ffmpeg var":"");
+  }catch{
+    el.textContent="İndirme sunucusuna ulaşılamıyor. Uygulamayı server.py ile başlat.";
+  }
+}
+
 function filenameFromDisposition(value){
   const raw=String(value||"");
   const utf=raw.match(/filename\*=UTF-8''([^;]+)/i);
@@ -321,7 +342,7 @@ async function downloadYouTubeForOffline(){
     const res=await fetch("./api/youtube-download",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({url,authorized:true})
+      body:JSON.stringify({url,authorized:true,cookieBrowser:$("#cookieBrowser").value})
     });
     if(!res.ok){
       let message="YouTube indirmesi başarısız.";
@@ -400,5 +421,5 @@ localPlayer.addEventListener("ended",()=>{if(currentMediaType==="local"&&loopAct
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferredInstallPrompt=e;$("#installBtn").classList.remove("hidden")});
 $("#installBtn").onclick=async()=>{if(!deferredInstallPrompt)return;deferredInstallPrompt.prompt();await deferredInstallPrompt.userChoice;deferredInstallPrompt=null;$("#installBtn").classList.add("hidden")};
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=4");
-renderPresets();renderRecent();renderOfflineMedia();updateRangeStatus();
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=5");
+renderPresets();renderRecent();renderOfflineMedia();updateRangeStatus();checkServerStatus();
