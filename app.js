@@ -10,7 +10,7 @@ let loopTimer=null;
 let loopRestartTimer=null;
 let loopActive=false;
 let loopIteration=0;
-let loopResumeAvailable=false;
+let loopPaused=false;
 let waiting=false;
 let deferredInstallPrompt=null;
 let activeScreen="edit";
@@ -305,7 +305,7 @@ function loadVideo(input,autoplay=false){
   const id=parseVideoId(input);
   if(!id){showError("Geçerli bir YouTube bağlantısı veya video kimliği gir.");return}
   if(!playerReady||!player){showError("YouTube oynatıcı henüz hazır değil. Birkaç saniye sonra tekrar dene.");return}
-  stopLoop(false);loopResumeAvailable=false;loopIteration=0;releaseObjectUrl();
+  stopLoop(false);loopPaused=false;loopIteration=0;releaseObjectUrl();
   currentMediaType="youtube";currentVideoId=id;currentOfflineId="";
   $("#videoUrl").value="https://www.youtube.com/watch?v="+id;
   localPlayer.pause();localPlayer.removeAttribute("src");localPlayer.load();localPlayer.classList.add("hidden");
@@ -328,7 +328,7 @@ function loadVideo(input,autoplay=false){
 
 function setPoint(which){
   if(!mediaLoaded())return;
-  loopResumeAvailable=false;
+  loopPaused=false;
   loopIteration=0;
   const t=Math.max(0,mediaTime());
   $(which==="a"?"#startTime":"#endTime").value=formatTime(t);
@@ -336,7 +336,7 @@ function setPoint(which){
 }
 
 function nudge(which,delta){
-  loopResumeAvailable=false;
+  loopPaused=false;
   loopIteration=0;
   const el=$(which==="a"?"#startTime":"#endTime");
   const n=parseTime(el.value);
@@ -355,11 +355,18 @@ function validateLoop(){
   return"";
 }
 
-function setLoopButtons(running){
-  $("#startLoopBtn").disabled=running;
-  $("#stopLoopBtn").disabled=!running;
-  $("#playPresetBtn").disabled=running||!$("#playPresetSelect").value;
-  $("#playStopBtn").disabled=!running;
+function setLoopButtons(){
+  const hasPlayPreset=!!$("#playPresetSelect").value;
+  $("#startLoopBtn").disabled=loopActive&&!loopPaused;
+  $("#playPresetBtn").disabled=(loopActive&&!loopPaused)||!hasPlayPreset;
+
+  const canPauseResume=loopActive||loopPaused;
+  $("#stopLoopBtn").disabled=!canPauseResume;
+  $("#playStopBtn").disabled=!canPauseResume;
+
+  const label=loopPaused?"▶ Devam":"⏸ Dur";
+  $("#stopLoopBtn").textContent=label;
+  $("#playStopBtn").textContent=label;
 }
 
 function startLoop(){
@@ -367,19 +374,25 @@ function startLoop(){
   if(err){showError(err);return}
   showError("");
   const r=currentRange();
+
+  clearInterval(loopTimer);loopTimer=null;
   clearTimeout(loopRestartTimer);loopRestartTimer=null;
-  if(!loopResumeAvailable)loopIteration=0;
-  loopResumeAvailable=false;
-  loopActive=true;waiting=false;
-  setLoopButtons(true);
+
+  loopIteration=0;
+  loopPaused=false;
+  loopActive=true;
+  waiting=false;
+
   $("#loopState").textContent="Tekrar ediyor";
   $("#playLoopState").textContent="Tekrar ediyor";
+
   const activeRate=setPlaybackSpeed($("#editSpeedManual").value||$("#playbackRate").value);
   $("#playbackRate").value=[...$("#playbackRate").options].some(o=>Number(o.value)===activeRate)?String(activeRate):$("#playbackRate").value;
+
   mediaSeek(r.a);
   mediaPlay();
-  clearInterval(loopTimer);
   loopTimer=setInterval(loopTick,60);
+  setLoopButtons();
   updateRangeStatus();
 }
 
@@ -397,11 +410,11 @@ function handleLoopBoundary(){
 
   if(loopIteration>=target){
     loopActive=false;
-    loopResumeAvailable=false;
+    loopPaused=false;
     clearInterval(loopTimer);loopTimer=null;
     clearTimeout(loopRestartTimer);loopRestartTimer=null;
     forcePauseMedia();
-    setLoopButtons(false);
+    setLoopButtons();
     syncPlayControls();
     $("#loopState").textContent="Tamamlandı ✓";
     $("#playLoopState").textContent="Tamamlandı ✓";
@@ -434,20 +447,51 @@ function handleLoopBoundary(){
 }
 
 function stopLoop(updateLabel=true){
-  const target=Math.max(1,Number($("#repeatCount").value)||1);
-  if(updateLabel)loopResumeAvailable=loopIteration>0&&loopIteration<target;
   loopActive=false;
+  loopPaused=false;
   waiting=false;
   clearInterval(loopTimer);loopTimer=null;
   clearTimeout(loopRestartTimer);loopRestartTimer=null;
   forcePauseMedia();
-  setLoopButtons(false);
+  setLoopButtons();
   syncPlayControls();
   if(updateLabel){
     $("#loopState").textContent="Durduruldu";
     $("#playLoopState").textContent="Durduruldu";
   }
   updateRangeStatus();
+}
+
+function pauseResumeLoop(){
+  if(loopActive&&!loopPaused){
+    loopActive=false;
+    loopPaused=true;
+    waiting=false;
+    clearInterval(loopTimer);loopTimer=null;
+    clearTimeout(loopRestartTimer);loopRestartTimer=null;
+    forcePauseMedia();
+    $("#loopState").textContent="Duraklatıldı";
+    $("#playLoopState").textContent="Duraklatıldı";
+    setLoopButtons();
+    syncPlayControls();
+    updateRangeStatus();
+    return;
+  }
+
+  if(loopPaused){
+    loopPaused=false;
+    loopActive=true;
+    waiting=false;
+    setPlaybackSpeed($("#editSpeedManual").value||$("#playbackRate").value);
+    mediaPlay();
+    clearInterval(loopTimer);
+    loopTimer=setInterval(loopTick,60);
+    $("#loopState").textContent="Tekrar ediyor";
+    $("#playLoopState").textContent="Tekrar ediyor";
+    setLoopButtons();
+    syncPlayControls();
+    updateRangeStatus();
+  }
 }
 
 function openSaveDialog(){
@@ -479,7 +523,7 @@ function savePreset(){
 }
 
 async function usePreset(p,{play=false}={}){
-  loopResumeAvailable=false;
+  loopPaused=false;
   loopIteration=0;
   $("#startTime").value=formatTime(p.a);
   $("#endTime").value=formatTime(p.b);
@@ -566,9 +610,10 @@ function syncPlayControls(){
   const index=list.findIndex(p=>p.id===id);
   const hasSelection=index>=0;
 
-  $("#playPresetBtn").disabled=loopActive||!hasSelection;
+  $("#playPresetBtn").disabled=(loopActive&&!loopPaused)||!hasSelection;
   $("#prevPresetBtn").disabled=!hasSelection||index<=0;
   $("#nextPresetBtn").disabled=!hasSelection||index>=list.length-1;
+  setLoopButtons();
 }
 
 function selectPlayVideo(videoId){
@@ -754,11 +799,11 @@ $("#setEndBtn").onclick=()=>setPoint("b");
 document.querySelectorAll("[data-nudge-start]").forEach(b=>b.onclick=()=>nudge("a",Number(b.dataset.nudgeStart)));
 document.querySelectorAll("[data-nudge-end]").forEach(b=>b.onclick=()=>nudge("b",Number(b.dataset.nudgeEnd)));
 $("#startLoopBtn").onclick=startLoop;
-$("#stopLoopBtn").onclick=e=>{e.preventDefault();e.stopPropagation();stopLoop(true)};
+$("#stopLoopBtn").onclick=e=>{e.preventDefault();e.stopPropagation();pauseResumeLoop()};
 $("#savePresetBtn").onclick=openSaveDialog;
 $("#confirmSavePreset").addEventListener("click",savePreset);
-["#startTime","#endTime"].forEach(s=>$(s).addEventListener("input",()=>{loopResumeAvailable=false;loopIteration=0;updateRangeStatus()}));
-$("#repeatCount").addEventListener("input",()=>{loopResumeAvailable=false;loopIteration=0;updateRangeStatus()});
+["#startTime","#endTime"].forEach(s=>$(s).addEventListener("input",()=>{loopPaused=false;loopIteration=0;updateRangeStatus()}));
+$("#repeatCount").addEventListener("input",()=>{loopPaused=false;loopIteration=0;updateRangeStatus()});
 $("#playbackRate").addEventListener("change",()=>setPlaybackSpeed($("#playbackRate").value));
 $("#editSpeedManual").addEventListener("change",()=>setPlaybackSpeed($("#editSpeedManual").value));
 $("#editSpeedManual").addEventListener("input",()=>syncSpeedUI(clampSpeed($("#editSpeedManual").value)));
@@ -777,9 +822,12 @@ $("#prevPresetBtn").onclick=()=>navigatePlayPreset(-1);
 $("#nextPresetBtn").onclick=()=>navigatePlayPreset(1);
 $("#playPresetBtn").onclick=()=>{
   const p=state.presets.find(x=>x.id===$("#playPresetSelect").value);
-  if(p)usePreset(p,{play:true});
+  if(!p)return;
+  loopPaused=false;
+  loopIteration=0;
+  usePreset(p,{play:true});
 };
-$("#playStopBtn").onclick=e=>{e.preventDefault();e.stopPropagation();stopLoop(true)};
+$("#playStopBtn").onclick=e=>{e.preventDefault();e.stopPropagation();pauseResumeLoop()};
 
 $("#youtubeDownloadBtn").onclick=downloadYouTubeForOffline;
 $("#offlineFileInput").addEventListener("change",async e=>{const file=e.target.files?.[0];if(file){try{await importOfflineFile(file)}catch(err){showError("Dosya kaydedilemedi: "+(err?.message||"bilinmeyen hata"))}e.target.value=""}});
@@ -805,4 +853,4 @@ renderPlaySelectors();
 renderOfflineMedia();
 updateRangeStatus();
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=15");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=16");
