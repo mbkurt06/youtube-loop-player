@@ -130,10 +130,44 @@ function forcePauseMedia(){
   }
 }
 function mediaSetRate(rate){
-  rate=Number(rate)||1;
-  if(currentMediaType==="local")localPlayer.playbackRate=rate;
-  else if(playerReady&&player){try{player.setPlaybackRate(rate)}catch{}}
+  rate=clampSpeed(rate);
+  if(currentMediaType==="local"){
+    localPlayer.playbackRate=rate;
+  }else if(playerReady&&player){
+    try{
+      const available=player.getAvailablePlaybackRates?.()||[];
+      if(available.length){
+        const nearest=available.reduce((best,x)=>Math.abs(x-rate)<Math.abs(best-rate)?x:best,available[0]);
+        player.setPlaybackRate(nearest);
+        rate=nearest;
+      }else{
+        player.setPlaybackRate(rate);
+      }
+    }catch{}
+  }
+  return rate;
 }
+
+function clampSpeed(value){
+  const n=Number(value);
+  if(!Number.isFinite(n))return 1;
+  return Math.min(2,Math.max(0.25,Math.round(n*100)/100));
+}
+function syncSpeedUI(rate){
+  const r=clampSpeed(rate);
+  $("#playbackRate").value=[...$("#playbackRate").options].some(o=>Number(o.value)===r)?String(r):$("#playbackRate").value;
+  $("#editSpeedManual").value=String(r);
+  $("#playSpeedManual").value=String(r);
+  document.querySelectorAll("[data-speed]").forEach(b=>b.classList.toggle("active",Number(b.dataset.speed)===r));
+  document.querySelectorAll("[data-play-speed]").forEach(b=>b.classList.toggle("active",Number(b.dataset.playSpeed)===r));
+}
+function setPlaybackSpeed(rate){
+  const r=clampSpeed(rate);
+  mediaSetRate(r);
+  syncSpeedUI(r);
+  return r;
+}
+
 function releaseObjectUrl(){
   if(currentObjectUrl){URL.revokeObjectURL(currentObjectUrl);currentObjectUrl=""}
 }
@@ -333,7 +367,8 @@ function startLoop(){
   setLoopButtons(true);
   $("#loopState").textContent="Tekrar ediyor";
   $("#playLoopState").textContent="Tekrar ediyor";
-  mediaSetRate($("#playbackRate").value);
+  const activeRate=setPlaybackSpeed($("#editSpeedManual").value||$("#playbackRate").value);
+  $("#playbackRate").value=[...$("#playbackRate").options].some(o=>Number(o.value)===activeRate)?String(activeRate):$("#playbackRate").value;
   mediaSeek(r.a);
   mediaPlay();
   clearInterval(loopTimer);
@@ -371,7 +406,7 @@ function handleLoopBoundary(){
 
   if(pauseMs===0){
     mediaSeek(r.a);
-    mediaSetRate($("#playbackRate").value);
+    setPlaybackSpeed($("#editSpeedManual").value||$("#playbackRate").value);
     mediaPlay();
     setTimeout(()=>{waiting=false},120);
     return;
@@ -383,7 +418,7 @@ function handleLoopBoundary(){
     loopRestartTimer=null;
     if(!loopActive)return;
     mediaSeek(r.a);
-    mediaSetRate($("#playbackRate").value);
+    setPlaybackSpeed($("#editSpeedManual").value||$("#playbackRate").value);
     mediaPlay();
     setTimeout(()=>{waiting=false},120);
   },pauseMs);
@@ -422,7 +457,7 @@ function savePreset(){
     videoId:currentMediaType==="youtube"?currentVideoId:"",
     a:r.a,b:r.b,
     repeats:Math.max(1,Number($("#repeatCount").value)||1),
-    rate:Number($("#playbackRate").value)||1,
+    rate:clampSpeed($("#editSpeedManual").value||$("#playbackRate").value),
     pause:Number($("#pauseBetween").value)||0,
     createdAt:Date.now()
   });
@@ -435,7 +470,9 @@ async function usePreset(p,{play=false}={}){
   $("#startTime").value=formatTime(p.a);
   $("#endTime").value=formatTime(p.b);
   $("#repeatCount").value=p.repeats;
-  $("#playbackRate").value=String(p.rate);
+  const presetRate=clampSpeed(p.rate||1);
+  if([...$("#playbackRate").options].some(o=>Number(o.value)===presetRate))$("#playbackRate").value=String(presetRate);
+  syncSpeedUI(presetRate);
   $("#pauseBetween").value=String(p.pause||0);
   updateRangeStatus();
 
@@ -677,7 +714,13 @@ $("#stopLoopBtn").onclick=e=>{e.preventDefault();e.stopPropagation();stopLoop(tr
 $("#savePresetBtn").onclick=openSaveDialog;
 $("#confirmSavePreset").addEventListener("click",savePreset);
 ["#startTime","#endTime","#repeatCount"].forEach(s=>$(s).addEventListener("input",updateRangeStatus));
-$("#playbackRate").addEventListener("change",()=>mediaSetRate($("#playbackRate").value));
+$("#playbackRate").addEventListener("change",()=>setPlaybackSpeed($("#playbackRate").value));
+$("#editSpeedManual").addEventListener("change",()=>setPlaybackSpeed($("#editSpeedManual").value));
+$("#editSpeedManual").addEventListener("input",()=>syncSpeedUI(clampSpeed($("#editSpeedManual").value)));
+$("#playSpeedManual").addEventListener("change",()=>setPlaybackSpeed($("#playSpeedManual").value));
+$("#playSpeedManual").addEventListener("input",()=>syncSpeedUI(clampSpeed($("#playSpeedManual").value)));
+document.querySelectorAll("[data-speed]").forEach(b=>b.onclick=()=>setPlaybackSpeed(b.dataset.speed));
+document.querySelectorAll("[data-play-speed]").forEach(b=>b.onclick=()=>setPlaybackSpeed(b.dataset.playSpeed));
 
 $("#editTabBtn").onclick=()=>switchScreen("edit");
 $("#playTabBtn").onclick=()=>switchScreen("play");
@@ -707,6 +750,7 @@ $("#installBtn").onclick=async()=>{if(!deferredInstallPrompt)return;deferredInst
 $("#secondaryTools")?.addEventListener("toggle",e=>{if(e.currentTarget.open)checkServerStatus()});
 
 applyTheme();
+syncSpeedUI($("#playbackRate").value);
 renderSavedVideos();
 renderHistory();
 renderPresets();
@@ -714,4 +758,4 @@ renderPlaySelectors();
 renderOfflineMedia();
 updateRangeStatus();
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=11");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=12");
