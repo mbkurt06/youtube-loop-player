@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-title" content="Loop Player">
 <title>YouTube Loop Player</title>
 <link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="./styles.css?v=6">
+<link rel="stylesheet" href="./styles.css?v=7">
 </head>
 <body>
 <main class="app">
@@ -38,7 +38,7 @@
 <div class="status-panel"><div><span class="status-label">Tekrar</span><strong id="repeatStatus">0 / 10</strong></div><div><span class="status-label">Aralık</span><strong id="rangeStatus">0:00 – 0:10</strong></div><div><span class="status-label">Durum</span><strong id="loopState">Hazır</strong></div></div>
 </section>
 <section class="card"><div class="section-head"><div><h2>Bu videonun tekrar bölümleri</h2><p>Seçili video için A–B aralıklarını ayrı ayrı kaydedebilirsin.</p></div><button id="savePresetBtn" class="secondary">+ Bölümü kaydet</button></div><div id="presetList" class="preset-list"></div><p id="presetEmpty" class="muted">Bu video için henüz kayıtlı bölüm yok.</p></section>
-<details class="card secondary-tools">
+<details id="secondaryTools" class="card secondary-tools">
   <summary>İndirme / çevrimdışı kullanım <span>ikinci plan</span></summary>
   <div class="secondary-tools-body">
     <h3>YouTube’dan indirme</h3>
@@ -76,5 +76,5 @@
 </details>
 </main>
 <dialog id="saveDialog"><form method="dialog" class="dialog-card"><div class="dialog-head"><strong>Bölümü kaydet</strong><button value="cancel" class="icon-btn">×</button></div><label><span>Başlık</span><input id="presetTitle" type="text" placeholder="Örn. Salât-ı Münciye 1. bölüm"></label><div class="dialog-summary" id="presetSummary"></div><button id="confirmSavePreset" value="default" class="primary">Kaydet</button></form></dialog>
-<script src="https://www.youtube.com/iframe_api"></script><script src="./app.js?v=6" defer></script>
+<script src="https://www.youtube.com/iframe_api"></script><script src="./app.js?v=7" defer></script>
 </body></html>
