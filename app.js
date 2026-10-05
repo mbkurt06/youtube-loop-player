@@ -10,6 +10,7 @@ let loopTimer=null;
 let loopRestartTimer=null;
 let loopActive=false;
 let loopIteration=0;
+let loopResumeAvailable=false;
 let waiting=false;
 let deferredInstallPrompt=null;
 let activeScreen="edit";
@@ -304,7 +305,7 @@ function loadVideo(input,autoplay=false){
   const id=parseVideoId(input);
   if(!id){showError("Geçerli bir YouTube bağlantısı veya video kimliği gir.");return}
   if(!playerReady||!player){showError("YouTube oynatıcı henüz hazır değil. Birkaç saniye sonra tekrar dene.");return}
-  stopLoop(false);releaseObjectUrl();
+  stopLoop(false);loopResumeAvailable=false;loopIteration=0;releaseObjectUrl();
   currentMediaType="youtube";currentVideoId=id;currentOfflineId="";
   $("#videoUrl").value="https://www.youtube.com/watch?v="+id;
   localPlayer.pause();localPlayer.removeAttribute("src");localPlayer.load();localPlayer.classList.add("hidden");
@@ -327,12 +328,16 @@ function loadVideo(input,autoplay=false){
 
 function setPoint(which){
   if(!mediaLoaded())return;
+  loopResumeAvailable=false;
+  loopIteration=0;
   const t=Math.max(0,mediaTime());
   $(which==="a"?"#startTime":"#endTime").value=formatTime(t);
   updateRangeStatus();
 }
 
 function nudge(which,delta){
+  loopResumeAvailable=false;
+  loopIteration=0;
   const el=$(which==="a"?"#startTime":"#endTime");
   const n=parseTime(el.value);
   const baseTenths=Math.round((Number.isFinite(n)?n:0)*10);
@@ -363,7 +368,9 @@ function startLoop(){
   showError("");
   const r=currentRange();
   clearTimeout(loopRestartTimer);loopRestartTimer=null;
-  loopIteration=0;loopActive=true;waiting=false;
+  if(!loopResumeAvailable)loopIteration=0;
+  loopResumeAvailable=false;
+  loopActive=true;waiting=false;
   setLoopButtons(true);
   $("#loopState").textContent="Tekrar ediyor";
   $("#playLoopState").textContent="Tekrar ediyor";
@@ -390,6 +397,7 @@ function handleLoopBoundary(){
 
   if(loopIteration>=target){
     loopActive=false;
+    loopResumeAvailable=false;
     clearInterval(loopTimer);loopTimer=null;
     clearTimeout(loopRestartTimer);loopRestartTimer=null;
     forcePauseMedia();
@@ -426,6 +434,8 @@ function handleLoopBoundary(){
 }
 
 function stopLoop(updateLabel=true){
+  const target=Math.max(1,Number($("#repeatCount").value)||1);
+  if(updateLabel)loopResumeAvailable=loopIteration>0&&loopIteration<target;
   loopActive=false;
   waiting=false;
   clearInterval(loopTimer);loopTimer=null;
@@ -469,6 +479,8 @@ function savePreset(){
 }
 
 async function usePreset(p,{play=false}={}){
+  loopResumeAvailable=false;
+  loopIteration=0;
   $("#startTime").value=formatTime(p.a);
   $("#endTime").value=formatTime(p.b);
   $("#repeatCount").value=p.repeats;
@@ -745,7 +757,8 @@ $("#startLoopBtn").onclick=startLoop;
 $("#stopLoopBtn").onclick=e=>{e.preventDefault();e.stopPropagation();stopLoop(true)};
 $("#savePresetBtn").onclick=openSaveDialog;
 $("#confirmSavePreset").addEventListener("click",savePreset);
-["#startTime","#endTime","#repeatCount"].forEach(s=>$(s).addEventListener("input",updateRangeStatus));
+["#startTime","#endTime"].forEach(s=>$(s).addEventListener("input",()=>{loopResumeAvailable=false;loopIteration=0;updateRangeStatus()}));
+$("#repeatCount").addEventListener("input",()=>{loopResumeAvailable=false;loopIteration=0;updateRangeStatus()});
 $("#playbackRate").addEventListener("change",()=>setPlaybackSpeed($("#playbackRate").value));
 $("#editSpeedManual").addEventListener("change",()=>setPlaybackSpeed($("#editSpeedManual").value));
 $("#editSpeedManual").addEventListener("input",()=>syncSpeedUI(clampSpeed($("#editSpeedManual").value)));
@@ -792,4 +805,4 @@ renderPlaySelectors();
 renderOfflineMedia();
 updateRangeStatus();
 
-if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=14");
+if("serviceWorker"in navigator)navigator.serviceWorker.register("./sw.js?v=15");
